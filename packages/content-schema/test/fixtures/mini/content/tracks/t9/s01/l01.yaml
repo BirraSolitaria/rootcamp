@@ -39,11 +39,11 @@ tasks:
     explanation: Флаг -d запускает контейнер в фоновом режиме и печатает его ID.
   - id: t9.s01.l01.t06
     type: assemble
-    prompt: Собери команду, которая показывает локальные образы
-    answer: [docker, image, ls]
-    altAnswers: [[docker, images]]
-    distractors: [ps, rm]
-    explanation: docker image ls и короткая форма docker images выводят список локальных образов.
+    prompt: Собери команду интерактивного запуска alpine с терминалом
+    answer: [docker, run, -i, -t, alpine]
+    altAnswers: [[docker, run, -t, -i, alpine]]
+    distractors: [-d, pull]
+    explanation: Флаги -i и -t можно указать в любом порядке; вместе они дают интерактивный терминал.
   - id: t9.s01.l01.t07
     type: fill_blank
     prompt: Допиши команду, которая показывает запущенные контейнеры
