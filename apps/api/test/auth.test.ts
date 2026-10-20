@@ -411,6 +411,18 @@ describe('POST /api/auth/logout', () => {
     const me = await getMe(cookies);
     expect(me.statusCode).toBe(401);
   });
+
+  it('no cookie, or a stale one → still 204 and the cookie is cleared', async () => {
+    const none = await post('/api/auth/logout');
+    expect(none.statusCode).toBe(204);
+    expect(none.cookies.find((c) => c.name === 'rc_sid')?.value).toBe('');
+
+    const cookies = sessionCookie(await register(ann));
+    expect((await post('/api/auth/logout', undefined, cookies)).statusCode).toBe(204);
+    const stale = await post('/api/auth/logout', undefined, cookies);
+    expect(stale.statusCode).toBe(204);
+    expect(stale.cookies.find((c) => c.name === 'rc_sid')?.value).toBe('');
+  });
 });
 
 describe('POST /api/auth/forgot + /api/auth/reset', () => {

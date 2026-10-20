@@ -9,6 +9,7 @@ import verifiedGuard from './plugins/verifiedGuard.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
+import { createVerifyLetterLimiter } from './services/limiter.js';
 import type { ContentStore, Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
 
 export interface AppDeps {
@@ -51,8 +52,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(verifiedGuard);
 
   await app.register(healthRoutes, { db: deps.db });
-  await app.register(authRoutes, deps);
-  await app.register(meRoutes, deps);
+  // Shared so an email change cannot bypass the resend-verification limit.
+  const verifyLetters = createVerifyLetterLimiter(deps.limits);
+  await app.register(authRoutes, { ...deps, verifyLetters });
+  await app.register(meRoutes, { ...deps, verifyLetters });
 
   return app;
 }

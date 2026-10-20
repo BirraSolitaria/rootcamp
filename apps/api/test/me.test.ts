@@ -186,6 +186,49 @@ describe('PATCH /api/me', () => {
     expect((ok.json() as { user: { email: string } }).user.email).toBe('new@x.ru');
   });
 
+  it('second email change within a minute → 429 rate_limited, no second letter', async () => {
+    const { cookies } = await signUp();
+    expect((await patchMe({ email: 'new@x.ru' }, cookies)).statusCode).toBe(200);
+    await h().mail.waitForMessages('new@x.ru');
+
+    const res = await patchMe({ email: 'other@x.ru' }, cookies);
+    expect(res.statusCode).toBe(429);
+    expect(errorOf(res).code).toBe('rate_limited');
+    const [u] = await h().db.select().from(users);
+    expect(u!.email).toBe('new@x.ru');
+
+    h().clock.advance(60_000);
+    expect((await patchMe({ email: 'other@x.ru' }, cookies)).statusCode).toBe(200);
+    await h().mail.waitForMessages('other@x.ru');
+    // The rejected attempt sent nothing: only the letter after the minute arrived.
+    expect(await h().mail.messages('other@x.ru')).toHaveLength(1);
+  });
+
+  it('email change shares the budget with resend-verification', async () => {
+    const { cookies } = await signUp();
+    expect((await post('/api/auth/resend-verification', undefined, cookies)).statusCode).toBe(204);
+    const res = await patchMe({ email: 'new@x.ru' }, cookies);
+    expect(res.statusCode).toBe(429);
+    expect(errorOf(res).code).toBe('rate_limited');
+    expect(await h().mail.messages('new@x.ru')).toEqual([]);
+  });
+
+  it('the current email (any case) is a no-op: no letter, old link still valid', async () => {
+    const { cookies } = await signUp();
+    const [msg] = await h().mail.waitForMessages('ann@mail.ru');
+
+    const res = await patchMe({ email: 'Ann@Mail.RU', reminderEnabled: false }, cookies);
+    expect(res.statusCode).toBe(200);
+    expect(
+      (res.json() as { user: { email: string; reminderEnabled: boolean } }).user,
+    ).toMatchObject({ email: 'ann@mail.ru', reminderEnabled: false });
+    // Not limited either: the no-op did not spend the budget.
+    expect((await patchMe({ email: 'ann@mail.ru' }, cookies)).statusCode).toBe(200);
+    expect(await h().mail.messages('ann@mail.ru')).toHaveLength(1);
+    const ok = await post('/api/auth/verify', { token: verifyTokenFrom(msg!) });
+    expect(ok.statusCode).toBe(200);
+  });
+
   it('verified: email change → 409 email_already_verified, nothing changes', async () => {
     const { id, cookies } = await signUp();
     await markVerified(id);

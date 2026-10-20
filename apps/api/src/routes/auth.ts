@@ -7,7 +7,7 @@ import { resetEmail, tokenLink, verifyEmail } from '../mail/templates.js';
 import { HttpError } from '../plugins/errors.js';
 import { clearSessionCookie, SESSION_COOKIE, setSessionCookie } from '../plugins/session.js';
 import { consumeEmailToken, issueEmailToken } from '../services/emailTokens.js';
-import { createLimiter, limitSpec } from '../services/limiter.js';
+import type { Limiter } from '../services/limiter.js';
 import { enqueueEmail } from '../services/mailer.js';
 import { createSession, revokeAllSessions, revokeSession } from '../services/sessions.js';
 import {
@@ -22,6 +22,9 @@ import {
 } from '../services/users.js';
 
 export type AuthDeps = Pick<AppDeps, 'config' | 'db' | 'now' | 'mailer' | 'boss' | 'limits'>;
+
+/** Route deps: the app's deps plus the verify-letter limiter shared by auth and me routes. */
+export type AuthRouteDeps = AuthDeps & { verifyLetters: Limiter };
 
 /** Renders the `verify`/`reset` letter for `token` and hands it to `enqueueEmail`. */
 export async function sendTokenEmail(
@@ -42,11 +45,9 @@ export async function sendTokenEmail(
 }
 
 /** `/api/auth/*`: register, verify, resend-verification, login, logout, forgot, reset. */
-export async function authRoutes(app: FastifyInstance, deps: AuthDeps) {
-  const { config, db, now } = deps;
-  // Per app instance: a rebuilt app (harness reset) starts with clean counters.
-  const resendMinute = createLimiter(limitSpec('resendVerificationMinute', deps.limits));
-  const resendDay = createLimiter(limitSpec('resendVerificationDay', deps.limits));
+export async function authRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
+  // `verifyLetters`: per-user verify-letter budget, shared with `PATCH /api/me {email}`.
+  const { config, db, now, verifyLetters } = deps;
   // So the first login with an unknown email is not slower than the rest.
   await primeDummyHash();
 
@@ -87,7 +88,7 @@ export async function authRoutes(app: FastifyInstance, deps: AuthDeps) {
       throw new HttpError(409, 'email_already_verified', 'email is already verified');
     }
     const at = now();
-    if (!resendMinute.hit(sessionUser.id, at) || !resendDay.hit(sessionUser.id, at)) {
+    if (!verifyLetters.hit(sessionUser.id, at)) {
       throw new HttpError(429, 'rate_limited', 'too many letters, try again later');
     }
     const user = await findUserById(db, sessionUser.id);
@@ -111,7 +112,8 @@ export async function authRoutes(app: FastifyInstance, deps: AuthDeps) {
     return { user: toUserDto(user) };
   });
 
-  app.post('/api/auth/logout', async (req, reply) => {
+  // Public: a missing, expired or stale cookie still gets 204 and is cleared.
+  app.post('/api/auth/logout', { config: { public: true } }, async (req, reply) => {
     const token = req.cookies[SESSION_COOKIE];
     if (token) await revokeSession(db, token);
     clearSessionCookie(reply, config);

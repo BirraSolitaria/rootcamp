@@ -70,3 +70,13 @@ export function createLimiter({ max, windowMs }: LimitSpec): Limiter {
     },
   };
 }
+
+/**
+ * One per-user budget for verify letters (resend-verification and `PATCH /api/me {email}`):
+ * 1/min and 5/day. Create one per app and share it between the routes that send them.
+ */
+export function createVerifyLetterLimiter(overrides?: Limits): Limiter {
+  const minute = createLimiter(limitSpec('resendVerificationMinute', overrides));
+  const day = createLimiter(limitSpec('resendVerificationDay', overrides));
+  return { hit: (key, now) => minute.hit(key, now) && day.hit(key, now) };
+}
