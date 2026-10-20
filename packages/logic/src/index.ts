@@ -9,3 +9,6 @@ export * from './reward.js';
 export * from './format.js';
 export * from './plural.js';
 export * from './shuffle.js';
+export * from './answerCheck.js';
+export * from './courseQuery.js';
+export * from './unlock.js';
