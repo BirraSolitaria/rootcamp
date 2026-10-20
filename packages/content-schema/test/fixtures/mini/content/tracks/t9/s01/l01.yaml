@@ -1,0 +1,74 @@
+id: t9.s01.l01
+title: Образы и контейнеры
+theory:
+  title: Образ и контейнер
+  blocks:
+    - {
+        type: text,
+        text: 'Образ — неизменяемый шаблон файловой системы. Контейнер — запущенный экземпляр образа со своим слоем записи.',
+      }
+    - { type: code, code: 'docker run --rm hello-world' }
+tasks:
+  - id: t9.s01.l01.t01
+    type: single_choice
+    question: Что такое контейнер по отношению к образу?
+    options: [Запущенный экземпляр образа, Архив с исходным кодом, Виртуальная машина с ядром]
+    correctIndex: 0
+    explanation: Контейнер создаётся из образа и добавляет к нему слой для записи.
+  - id: t9.s01.l01.t02
+    type: single_choice
+    question: Какая команда скачивает образ без запуска контейнера?
+    options: [docker run, docker pull, docker exec, docker start]
+    correctIndex: 1
+    explanation: docker pull только загружает образ из реестра в локальное хранилище.
+  - id: t9.s01.l01.t03
+    type: true_false
+    statement: Изменения файлов внутри контейнера меняют исходный образ.
+    answer: false
+    explanation: Запись идёт в верхний слой контейнера, слои образа остаются только для чтения.
+  - id: t9.s01.l01.t04
+    type: true_false
+    statement: Из одного образа можно запустить несколько контейнеров одновременно.
+    answer: true
+    explanation: Каждый контейнер получает свой слой записи поверх общих слоёв образа.
+  - id: t9.s01.l01.t05
+    type: assemble
+    prompt: Собери команду запуска контейнера nginx в фоне
+    answer: [docker, run, -d, nginx]
+    distractors: [-it, pull]
+    explanation: Флаг -d запускает контейнер в фоновом режиме и печатает его ID.
+  - id: t9.s01.l01.t06
+    type: assemble
+    prompt: Собери команду, которая показывает локальные образы
+    answer: [docker, image, ls]
+    altAnswers: [[docker, images]]
+    distractors: [ps, rm]
+    explanation: docker image ls и короткая форма docker images выводят список локальных образов.
+  - id: t9.s01.l01.t07
+    type: fill_blank
+    prompt: Допиши команду, которая показывает запущенные контейнеры
+    template: docker ___
+    acceptedAnswers: [ps, container ls]
+    explanation: docker ps выводит только работающие контейнеры; с флагом -a покажет все.
+  - id: t9.s01.l01.t08
+    type: fill_blank
+    prompt: Допиши флаг, который удаляет контейнер после остановки
+    template: docker run ___ alpine echo hi
+    acceptedAnswers: [--rm]
+    explanation: С флагом --rm Docker сам удалит контейнер, когда процесс в нём завершится.
+  - id: t9.s01.l01.t09
+    type: match_pairs
+    prompt: Сопоставь команду и её действие
+    pairs:
+      - { left: docker pull, right: Скачать образ }
+      - { left: docker run, right: Создать и запустить контейнер }
+      - { left: docker stop, right: Остановить контейнер }
+    explanation: Это базовый жизненный цикл работы с образами и контейнерами.
+  - id: t9.s01.l01.t10
+    type: order_steps
+    prompt: Расположи шаги запуска нового сервиса в правильном порядке
+    steps:
+      - Скачать образ
+      - Запустить контейнер
+      - Проверить логи контейнера
+    explanation: Сначала нужен образ, затем контейнер, после запуска стоит проверить логи.

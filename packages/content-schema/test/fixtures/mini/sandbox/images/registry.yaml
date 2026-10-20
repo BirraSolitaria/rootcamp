@@ -1,0 +1,6 @@
+images:
+  - ref: rc/linux-base:24.04
+    class: light
+    cpu: 1
+    memMb: 512
+    pids: 256

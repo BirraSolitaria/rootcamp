@@ -1,0 +1,9 @@
+id: t9.s01
+title: Основы контейнеров
+description: образы, контейнеры, тома и сети
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - practice: inc-demo

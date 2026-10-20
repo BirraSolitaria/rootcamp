@@ -1,0 +1,8 @@
+id: t9
+order: 9
+title: Мини-трек для тестов
+description: Тестовый трек загрузчика и валидатора контента.
+status: partial
+prerequisites: []
+reviewedAt: 2026-10-20
+sections: [s01]

@@ -1,0 +1,75 @@
+id: t9.s01.l02
+title: Dockerfile
+theory:
+  title: Сборка образа
+  blocks:
+    - {
+        type: text,
+        text: 'Dockerfile описывает шаги сборки образа. Каждая инструкция создаёт новый слой.',
+      }
+    - { type: code, code: 'docker build -t app:1 .' }
+tasks:
+  - id: t9.s01.l02.t01
+    type: single_choice
+    question: Какая инструкция Dockerfile задаёт базовый образ?
+    options: [FROM, RUN, COPY]
+    correctIndex: 0
+    explanation: FROM всегда идёт первой значимой инструкцией и задаёт базовый образ.
+  - id: t9.s01.l02.t02
+    type: single_choice
+    question: Какой флаг docker build задаёт имя и тег образа?
+    options: [-f, -t, -p, -v]
+    correctIndex: 1
+    explanation: Флаг -t задаёт имя образа в формате имя:тег, например app:1.
+  - id: t9.s01.l02.t03
+    type: true_false
+    statement: Инструкция RUN выполняется при каждом запуске контейнера.
+    answer: false
+    explanation: RUN выполняется во время сборки образа; при запуске работает CMD или ENTRYPOINT.
+  - id: t9.s01.l02.t04
+    type: true_false
+    statement: Файл .dockerignore исключает файлы из контекста сборки.
+    answer: true
+    explanation: Исключённые файлы не отправляются демону и не попадают в COPY.
+  - id: t9.s01.l02.t05
+    type: assemble
+    prompt: Собери команду сборки образа app:1 из текущего каталога
+    answer: [docker, build, -t, app:1, .]
+    distractors: [run, -d]
+    explanation: Последний аргумент docker build — путь к контексту сборки, здесь текущий каталог.
+  - id: t9.s01.l02.t06
+    type: assemble
+    prompt: Собери инструкцию копирования каталога src в /app
+    answer: [COPY, src, /app]
+    distractors: [ADD, RUN]
+    explanation: COPY копирует файлы из контекста сборки в файловую систему образа.
+  - id: t9.s01.l02.t07
+    type: fill_blank
+    prompt: Допиши инструкцию, задающую рабочий каталог
+    template: ___ /app
+    acceptedAnswers: [WORKDIR]
+    explanation: WORKDIR задаёт каталог для последующих инструкций и для процесса контейнера.
+  - id: t9.s01.l02.t08
+    type: fill_blank
+    prompt: Допиши инструкцию, задающую команду по умолчанию
+    template: ___ ["node", "server.js"]
+    acceptedAnswers: [CMD]
+    explanation: CMD задаёт команду по умолчанию, которую можно переопределить в docker run.
+  - id: t9.s01.l02.t09
+    type: match_pairs
+    prompt: Сопоставь инструкцию и её назначение
+    pairs:
+      - { left: FROM, right: Базовый образ }
+      - { left: EXPOSE, right: Документирует порт }
+      - { left: ENV, right: Переменная окружения }
+      - { left: USER, right: Пользователь процесса }
+    explanation: Эти инструкции чаще всего встречаются в типичном Dockerfile.
+  - id: t9.s01.l02.t10
+    type: order_steps
+    prompt: Расположи инструкции Dockerfile в типичном порядке
+    steps:
+      - FROM node:22
+      - WORKDIR /app
+      - COPY . .
+      - CMD ["node", "server.js"]
+    explanation: Базовый образ, рабочий каталог, копирование кода и в конце команда запуска.

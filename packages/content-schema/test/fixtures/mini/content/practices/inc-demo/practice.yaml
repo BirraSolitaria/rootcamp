@@ -1,0 +1,26 @@
+id: inc-demo
+title: Демо-сервис не запущен
+track: t9
+brief: |
+  Дежурный сообщает: демо-сервис на сервере не работает, а файл отчёта
+  /srv/demo/report.txt так и не появился. Найди, почему сервис не стартует,
+  запусти его и убедись, что отчёт создан.
+image: rc/linux-base:24.04
+class: light
+hostname: incident-0001
+timeoutMin: 20
+setupTimeoutSec: 60
+goals:
+  - id: service-running
+    title: Демо-сервис запущен
+    check: check/service-running.sh
+    timeoutSec: 10
+  - id: file-created
+    title: Файл /srv/demo/report.txt создан
+    check: check/file-created.sh
+hints:
+  - Посмотри, какой процесс должен писать отчёт.
+  - 'ls -l /srv/demo покажет права на каталог'
+reward: { base: 40, noHintBonus: 10, hintCost: 5 }
+solution: solution.sh
+innerImages: []
