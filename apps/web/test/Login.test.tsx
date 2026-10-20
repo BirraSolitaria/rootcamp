@@ -48,4 +48,11 @@ describe('Login', () => {
     await submit();
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/));
   });
+
+  it('ignores a `next` with a control character (/%09/evil → //evil in a browser)', async () => {
+    mockFetch(() => jsonResponse(200, { user: { ...user, emailVerified: true } }));
+    renderAt(<Login />, { path: '/login', route: '/login?next=/%09/evil' });
+    await submit();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/));
+  });
 });
