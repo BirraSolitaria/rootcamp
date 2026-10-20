@@ -8,7 +8,10 @@ export type LessonStatus = 'completed' | 'current' | 'locked';
  * list, the first non-completed is current, the rest are locked. Practices
  * never block lessons.
  */
-export function lessonStatuses(track: Track, completed: Iterable<string>): Record<string, LessonStatus> {
+export function lessonStatuses(
+  track: Track,
+  completed: Iterable<string>,
+): Record<string, LessonStatus> {
   const done = new Set(completed);
   const result: Record<string, LessonStatus> = {};
   let currentAssigned = false;
@@ -52,7 +55,8 @@ export function practiceAvailability(
       if (node.kind === 'lesson') {
         prevLessonId = node.lessonId;
       } else {
-        result[node.practiceId] = prevLessonId === null || done.has(prevLessonId) ? 'available' : 'locked';
+        result[node.practiceId] =
+          prevLessonId === null || done.has(prevLessonId) ? 'available' : 'locked';
       }
     }
   }

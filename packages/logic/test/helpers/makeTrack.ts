@@ -87,7 +87,9 @@ export function makeTrack(opts: MakeTrackOptions = {}): { track: Track; index: C
   const { id = 't1', sections = 2, lessonsPerSection = 4, tasksPerLesson = 6 } = opts;
   const layout =
     opts.layout ??
-    Array.from({ length: sections }, () => Array.from({ length: lessonsPerSection }, (): LayoutToken => 'L'));
+    Array.from({ length: sections }, () =>
+      Array.from({ length: lessonsPerSection }, (): LayoutToken => 'L'),
+    );
 
   const refs: SectionRef[] = [];
   const sectionMap = new Map<string, Section>();

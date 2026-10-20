@@ -24,7 +24,10 @@ export function rightFor(task: InteractiveTask): UserAnswer {
 export function wrongFor(task: InteractiveTask): UserAnswer {
   switch (task.type) {
     case 'single_choice':
-      return { type: 'single_choice', selectedIndex: (task.correctIndex + 1) % task.options.length };
+      return {
+        type: 'single_choice',
+        selectedIndex: (task.correctIndex + 1) % task.options.length,
+      };
     case 'true_false':
       return { type: 'true_false', value: !task.answer };
     case 'assemble':

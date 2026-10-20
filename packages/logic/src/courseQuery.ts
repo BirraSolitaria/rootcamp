@@ -39,10 +39,14 @@ export function allTaskIds(ix: CourseIndex): Set<string> {
  * tasks; unknown lesson ids are ignored.
  */
 export function tasksOfLessons(ix: CourseIndex, ids: string[]): Task[] {
-  return ids.flatMap((id) => findLesson(ix, id)?.tasks ?? []).filter((t) => t.type !== 'terminal_practice');
+  return ids
+    .flatMap((id) => findLesson(ix, id)?.tasks ?? [])
+    .filter((t) => t.type !== 'terminal_practice');
 }
 
 /** Ids of `kind: 'lesson'` nodes of the track, in path order. */
 export function trackLessonIds(track: Track): string[] {
-  return track.sections.flatMap((s) => s.nodes.flatMap((n) => (n.kind === 'lesson' ? [n.lessonId] : [])));
+  return track.sections.flatMap((s) =>
+    s.nodes.flatMap((n) => (n.kind === 'lesson' ? [n.lessonId] : [])),
+  );
 }

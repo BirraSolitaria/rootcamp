@@ -1,6 +1,12 @@
 import { beforeEach, expect, test } from 'vitest';
 import { INTERACTIVE_TASK_TYPES } from '@rootcamp/content-schema';
-import { allTaskIds, findLesson, findTask, tasksOfLessons, trackLessonIds } from '../src/courseQuery.js';
+import {
+  allTaskIds,
+  findLesson,
+  findTask,
+  tasksOfLessons,
+  trackLessonIds,
+} from '../src/courseQuery.js';
 import { makeTrack } from './helpers/makeTrack.js';
 
 beforeEach(() => {
@@ -37,7 +43,12 @@ test('tasksOfLessons excludes terminal_practice tasks', () => {
 });
 
 test('trackLessonIds: only kind lesson, in path order', () => {
-  const { track } = makeTrack({ layout: [['L', 'L', 'inc-xxx', 'L'], ['inc-yyy', 'L']] });
+  const { track } = makeTrack({
+    layout: [
+      ['L', 'L', 'inc-xxx', 'L'],
+      ['inc-yyy', 'L'],
+    ],
+  });
   expect(trackLessonIds(track)).toEqual(['t1.s01.l01', 't1.s01.l02', 't1.s01.l03', 't1.s02.l01']);
 });
 
