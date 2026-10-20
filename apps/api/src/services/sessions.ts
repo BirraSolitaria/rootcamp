@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { sessions, users, type Db } from '@rootcamp/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { Executor } from './executor.js';
 
 /** Session lifetime; the cookie Max-Age matches it. */
@@ -47,8 +47,16 @@ export async function revokeSession(db: Db, token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.id, hashToken(token)));
 }
 
-export async function revokeAllSessions(db: Db, userId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.userId, userId));
+/** Deletes every session of the user, except the one with cookie token `keepToken` if given. */
+export async function revokeAllSessions(
+  db: Executor,
+  userId: string,
+  keepToken?: string,
+): Promise<void> {
+  const mine = eq(sessions.userId, userId);
+  await db
+    .delete(sessions)
+    .where(keepToken === undefined ? mine : and(mine, ne(sessions.id, hashToken(keepToken))));
 }
 
 export type SessionLookup =

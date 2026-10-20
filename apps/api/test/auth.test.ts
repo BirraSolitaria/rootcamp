@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { UserDto } from '@rootcamp/api-contract';
 import { emailLog, emailTokens, hearts, sessions, settings, streaks, users } from '@rootcamp/db';
 import { count, eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createLimiter } from '../src/services/limiter.js';
 import { harnessAppDeps, TEST_PUBLIC_ORIGIN, useHarness, type MailpitMessage } from './harness.js';
@@ -324,5 +324,158 @@ describe('createLimiter', () => {
     expect(l.hit('a', 1000)).toBe(true); // the hit at 0 left the window
     expect(l.hit('a', 1499)).toBe(false);
     expect(l.hit('a', 1500)).toBe(true);
+  });
+});
+
+const HOUR_MS = 3600_000;
+
+function post(url: string, payload?: object, cookies: Record<string, string> = {}) {
+  return h().app.inject({ method: 'POST', url, headers: csrf, payload, cookies });
+}
+
+function getMe(cookies: Record<string, string>) {
+  return h().app.inject({ method: 'GET', url: '/api/me', cookies });
+}
+
+function login(email: string, password: string) {
+  return post('/api/auth/login', { email, password });
+}
+
+function resetTokenFrom(msg: MailpitMessage): string {
+  const m = /\/reset\?token=([A-Za-z0-9_-]+)/.exec(msg.text);
+  if (!m) throw new Error(`no reset link in: ${msg.text}`);
+  return m[1]!;
+}
+
+describe('POST /api/auth/login', () => {
+  it('correct password → 200 {user}, a new working session cookie', async () => {
+    await register(ann);
+    const res = await login('Ann@Mail.ru', ann.password);
+    expect(res.statusCode).toBe(200);
+    const { user } = res.json() as { user: unknown };
+    expect(UserDto.parse(user)).toMatchObject({ email: 'ann@mail.ru', nick: 'ann' });
+    expect(String(res.headers['set-cookie'])).toMatch(/rc_sid=[A-Za-z0-9_-]{43};.*HttpOnly/);
+    expect((await getMe(sessionCookie(res))).statusCode).toBe(200);
+    expect(await h().db.select().from(sessions)).toHaveLength(2);
+  });
+
+  it('wrong password and unknown email → identical 401 invalid_credentials, no cookie', async () => {
+    await register(ann);
+    const wrong = await login(ann.email, 'wrong password!!');
+    const unknown = await login('nobody@mail.ru', ann.password);
+    for (const res of [wrong, unknown]) {
+      expect(res.statusCode).toBe(401);
+      expect(res.headers['set-cookie']).toBeUndefined();
+    }
+    expect(errorOf(wrong).code).toBe('invalid_credentials');
+    expect(wrong.body).toBe(unknown.body);
+  });
+
+  it('unknown email still runs argon2.verify (timing-safe)', async () => {
+    const argon2 = (await import('argon2')).default;
+    const spy = vi.spyOn(argon2, 'verify');
+    try {
+      const res = await login('nobody@mail.ru', ann.password);
+      expect(res.statusCode).toBe(401);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]![0]).toMatch(/^\$argon2id\$/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('banned user with the right password → 403 banned', async () => {
+    await register(ann);
+    await h().db.update(users).set({ status: 'banned' });
+    const res = await login(ann.email, ann.password);
+    expect(res.statusCode).toBe(403);
+    expect(errorOf(res).code).toBe('banned');
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('is public; bad body → 400 validation', async () => {
+    const res = await post('/api/auth/login', { email: 'not-an-email', password: 'x' });
+    expect(res.statusCode).toBe(400);
+    expect(errorOf(res).code).toBe('validation');
+  });
+});
+
+describe('POST /api/auth/logout', () => {
+  it('204, cookie cleared, the session no longer works', async () => {
+    const cookies = sessionCookie(await register(ann));
+    const res = await post('/api/auth/logout', undefined, cookies);
+    expect(res.statusCode).toBe(204);
+    const cleared = res.cookies.find((c) => c.name === 'rc_sid');
+    expect(cleared?.value).toBe('');
+    expect(await h().db.select().from(sessions)).toHaveLength(0);
+    const me = await getMe(cookies);
+    expect(me.statusCode).toBe(401);
+  });
+});
+
+describe('POST /api/auth/forgot + /api/auth/reset', () => {
+  it('unknown email → 204, no letter, no email_log row', async () => {
+    const res = await post('/api/auth/forgot', { email: 'nobody@mail.ru' });
+    expect(res.statusCode).toBe(204);
+    expect(await h().mail.messages('nobody@mail.ru')).toEqual([]);
+    expect(await h().db.select().from(emailLog)).toEqual([]);
+  });
+
+  it('known email → 204, reset letter with a 1 h link', async () => {
+    await register(ann);
+    const res = await post('/api/auth/forgot', { email: 'ANN@mail.ru' });
+    expect(res.statusCode).toBe(204);
+    const msgs = await h().mail.waitForMessages('ann@mail.ru', 2);
+    expect(msgs[1]!.text).toContain(`${TEST_PUBLIC_ORIGIN}/reset?token=`);
+    const resets = await h().db.select().from(emailTokens).where(eq(emailTokens.kind, 'reset'));
+    expect(resets).toHaveLength(1);
+    expect(resets[0]!.expiresAt.getTime()).toBe(h().clock.now() + HOUR_MS);
+    const logs = await h().db.select().from(emailLog).where(eq(emailLog.kind, 'reset'));
+    expect(logs).toMatchObject([{ status: 'sent' }]);
+  });
+
+  it('reset → 204, every old session 401, new password works, old does not', async () => {
+    const cookies = sessionCookie(await register(ann));
+    await post('/api/auth/forgot', { email: ann.email });
+    const msgs = await h().mail.waitForMessages('ann@mail.ru', 2);
+    const token = resetTokenFrom(msgs[1]!);
+
+    const res = await post('/api/auth/reset', { token, password: 'brand new password' });
+    expect(res.statusCode).toBe(204);
+    expect((await getMe(cookies)).statusCode).toBe(401);
+    expect(await h().db.select().from(sessions)).toHaveLength(0);
+
+    expect((await login(ann.email, ann.password)).statusCode).toBe(401);
+    expect((await login(ann.email, 'brand new password')).statusCode).toBe(200);
+
+    const again = await post('/api/auth/reset', { token, password: 'another password' });
+    expect(again.statusCode).toBe(409);
+    expect(errorOf(again).code).toBe('token_used');
+  });
+
+  it('reset link expires after 1 h; a verify token is not a reset token', async () => {
+    await register(ann);
+    const [verifyMsg] = await h().mail.waitForMessages('ann@mail.ru');
+    const asReset = await post('/api/auth/reset', {
+      token: tokenFrom(verifyMsg!),
+      password: 'brand new password',
+    });
+    expect(errorOf(asReset).code).toBe('token_invalid');
+
+    await post('/api/auth/forgot', { email: ann.email });
+    const msgs = await h().mail.waitForMessages('ann@mail.ru', 2);
+    h().clock.advance(HOUR_MS + 1);
+    const res = await post('/api/auth/reset', {
+      token: resetTokenFrom(msgs[1]!),
+      password: 'brand new password',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(errorOf(res).code).toBe('token_expired');
+  });
+
+  it('short new password → 400 validation', async () => {
+    const res = await post('/api/auth/reset', { token: 'x', password: 'short' });
+    expect(res.statusCode).toBe(400);
+    expect(errorOf(res).code).toBe('validation');
   });
 });

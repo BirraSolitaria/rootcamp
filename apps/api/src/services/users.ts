@@ -66,13 +66,55 @@ export async function findUserById(db: Executor, id: string): Promise<User | und
   return u;
 }
 
+/** Lookup by email; `users.email` is citext, so the match is case-insensitive. */
+export async function findUserByEmail(db: Executor, email: string): Promise<User | undefined> {
+  const [u] = await db.select().from(users).where(eq(users.email, email));
+  return u;
+}
+
+/** argon2id with the library's default parameters. */
+export function hashPassword(password: string): Promise<string> {
+  return argon2.hash(password, { type: argon2.argon2id });
+}
+
+/** False (never throws) for a wrong password or a malformed hash. */
+export async function verifyPassword(hash: string, password: string): Promise<boolean> {
+  try {
+    return await argon2.verify(hash, password);
+  } catch {
+    return false;
+  }
+}
+
+let dummyHash: Promise<string> | undefined;
+
+/** Computes the dummy hash ahead of the first login so that one is not slower. Idempotent. */
+export function primeDummyHash(): Promise<string> {
+  dummyHash ??= hashPassword('rootcamp dummy password');
+  return dummyHash;
+}
+
+/**
+ * Checks email + password. An unknown email is still verified against a dummy argon2id hash, so
+ * both failures take the same time; the caller answers both with the same 401.
+ */
+export async function checkCredentials(
+  db: Executor,
+  email: string,
+  password: string,
+): Promise<User | null> {
+  const user = await findUserByEmail(db, email);
+  const ok = await verifyPassword(user?.passwordHash ?? (await primeDummyHash()), password);
+  return user && ok ? user : null;
+}
+
 const UNIQUE_CONSTRAINT_CODES: Record<string, 'email_taken' | 'nick_taken'> = {
   users_email_unique: 'email_taken',
   users_nick_unique: 'nick_taken',
 };
 
 /** Maps a unique violation (23505) on users.email / users.nick, possibly wrapped by drizzle. */
-function takenCode(err: unknown): 'email_taken' | 'nick_taken' | undefined {
+export function takenCode(err: unknown): 'email_taken' | 'nick_taken' | undefined {
   for (let e = err, depth = 0; e && depth < 5; depth++) {
     const pg = e as { code?: unknown; constraint_name?: unknown; cause?: unknown };
     if (pg.code === '23505' && typeof pg.constraint_name === 'string') {
@@ -109,7 +151,7 @@ export async function registerUser(
   if (isHoneypot(body)) return null;
   if (!isValidTimeZone(body.tz)) throw new HttpError(400, 'validation', 'tz: unknown time zone');
 
-  const passwordHash = await argon2.hash(body.password, { type: argon2.argon2id });
+  const passwordHash = await hashPassword(body.password);
 
   let outcome: Registration | 'closed' | 'limit';
   try {
