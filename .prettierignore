@@ -4,3 +4,5 @@ coverage
 .turbo
 docs
 .superpowers
+# drizzle-kit output (regenerated, read back by drizzle-kit)
+apps/api/drizzle/meta

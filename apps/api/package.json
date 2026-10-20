@@ -12,16 +12,22 @@
     "dev": "tsx watch --conditions=rootcamp-src src/server.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "drizzle-kit": "drizzle-kit"
   },
   "dependencies": {
+    "@rootcamp/db": "workspace:*",
     "@rootcamp/logic": "workspace:*",
+    "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
     "pg": "8.23.1"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "12.2.1",
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "testcontainers": "12.2.1",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
