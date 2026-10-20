@@ -1,0 +1,77 @@
+.list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--touch);
+  color: var(--muted);
+  text-decoration: none;
+  font: 500 13px/18px var(--font-mono);
+}
+
+.glyph {
+  font: 700 15px/20px var(--font-mono);
+}
+
+.active {
+  color: var(--amber);
+}
+
+/* < 1024 px: fixed bottom tab bar */
+.bottom {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 10;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom .list {
+  justify-content: space-around;
+}
+
+.bottom .link {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 11px;
+}
+
+/* ≥ 1024 px: 220 px side navigation */
+.side {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  width: 220px;
+  padding: var(--space-xl) var(--space-lg);
+  border-right: 1px solid var(--line);
+}
+
+.brand {
+  margin-bottom: var(--space-xl);
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.side .list {
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.side .link {
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-md);
+}
+
+.side .active {
+  background: var(--surface-hi);
+}

@@ -1,0 +1,56 @@
+.shell {
+  min-height: 100vh;
+}
+
+.columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  min-width: 0;
+}
+
+.main,
+.aside {
+  min-width: 0;
+}
+
+/* < 640 px: one column, 16 px side margins, room for the bottom tab bar */
+.phone .columns {
+  padding: var(--space-lg) var(--space-lg) calc(var(--touch) + var(--space-xxl));
+}
+
+/* 640–1023 px: one column up to 720 px */
+.tablet .columns {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg) calc(var(--touch) + var(--space-xxl));
+}
+
+/* ≥ 1024 px: side navigation + main column; the right column sits under the main one */
+.laptop,
+.desktop {
+  display: flex;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.laptop .columns,
+.desktop .columns {
+  flex: 1;
+  padding: var(--space-xl);
+}
+
+/* ≥ 1280 px: right column 300–360 px */
+.desktop .columns {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.desktop .main {
+  flex: 1;
+}
+
+.desktop .aside {
+  flex: 0 1 360px;
+  min-width: 300px;
+}

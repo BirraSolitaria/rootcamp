@@ -1,0 +1,35 @@
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--space-lg);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-xl);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.card form {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}

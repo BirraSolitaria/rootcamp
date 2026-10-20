@@ -1,0 +1,87 @@
+/*
+ * Palette «Слои» and scales, ported from DockerLingo src/ui/theme.ts (spec §7.2).
+ * Dark theme only.
+ */
+:root {
+  /* surfaces */
+  --bg: #151a2d;
+  --surface: #1f2640;
+  --surface-hi: #2a2a3a;
+  --term: #0f1324;
+  --line: #323b5c;
+  --edge: #46507a;
+  /* ink */
+  --ink: #e6e9f5;
+  --muted: #9aa3c7;
+  --faint: #6b7499;
+  /* status */
+  --amber: #ffb547;
+  --amber-soft: rgba(255, 181, 71, 0.25);
+  --teal: #43d1b5;
+  --teal-bg: #183634;
+  --coral: #ff7a70;
+  --coral-bg: #2b1e2e;
+  --coral-ink: #f1dadb;
+  --flame: #ff9f43;
+  --on-accent: #151a2d;
+  --on-coral: #2b1215;
+  --scrim: rgba(8, 10, 22, 0.72);
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --font-display: 'Unbounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* §8.2: touch targets, focus ring */
+  --touch: 44px;
+  --focus-ring: 2px solid var(--amber);
+}
+
+/* Type scale (theme.ts `type`): weight comes with the role. */
+.t-display {
+  font: 700 26px/33px var(--font-display);
+  color: var(--ink);
+}
+.t-title {
+  font: 600 23px/29px var(--font-sans);
+  color: var(--ink);
+}
+.t-heading {
+  font: 500 17px/23px var(--font-sans);
+  color: var(--ink);
+}
+.t-body {
+  font: 400 16px/24px var(--font-sans);
+  color: var(--ink);
+}
+.t-body-strong {
+  font: 500 16px/23px var(--font-sans);
+  color: var(--ink);
+}
+.t-small {
+  font: 400 12px/18px var(--font-mono);
+  color: var(--muted);
+}
+.t-label {
+  font: 500 13px/18px var(--font-mono);
+  color: var(--muted);
+}
+.t-stat {
+  font: 700 15px/20px var(--font-mono);
+  color: var(--ink);
+}
+.t-code {
+  font: 400 14px/20px var(--font-mono);
+  color: var(--ink);
+}

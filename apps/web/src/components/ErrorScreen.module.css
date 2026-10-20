@@ -1,0 +1,9 @@
+.screen {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-lg);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-xxl) var(--space-lg);
+  text-align: center;
+}
