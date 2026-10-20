@@ -1,0 +1,68 @@
+# Base service set shared by every stand (dev, e2e, production).
+# Dev: docker compose -f infra/compose.yaml -f infra/compose.dev.yaml up --build
+# Production-only services (apt-mirror, registry, dnsmasq, backup, sandboxd) arrive in M4b/M6.
+name: rootcamp
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rootcamp}
+      POSTGRES_DB: ${POSTGRES_DB:-rootcamp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks: [rc-internal]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 768m
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:-rootcamp/api:local}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      PORT: '3000'
+    networks: [rc-internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *logging
+
+  caddy:
+    image: ${WEB_IMAGE:-rootcamp/web:local}
+    volumes:
+      - caddy-data:/data
+    networks: [rc-public, rc-internal]
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  rc-public:
+  rc-internal:
+
+volumes:
+  pg-data:
+  caddy-data:

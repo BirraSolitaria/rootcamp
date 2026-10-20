@@ -14,6 +14,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "content:validate": "pnpm --filter @rootcamp/content-schema exec tsx src/cli.ts validate ../../content",
+    "dev:up": "docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml up --build",
     "prepare": "husky"
   },
   "devDependencies": {

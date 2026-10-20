@@ -1,0 +1,36 @@
+# Dev overlay: images built from sources, Mailpit, Caddy on :8080 without TLS.
+# Site http://localhost:8080 · Mailpit http://localhost:8025 · Postgres localhost:5432
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: rootcamp
+    ports:
+      - '5432:5432'
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    environment:
+      DATABASE_URL: postgres://rootcamp:rootcamp@postgres:5432/rootcamp
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    ports:
+      - '8080:8080'
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.27}
+    networks: [rc-internal]
+    ports:
+      - '8025:8025'
+    restart: unless-stopped

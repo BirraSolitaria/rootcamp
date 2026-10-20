@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm format:check
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      - name: Coverage gate (@rootcamp/logic lines >= 95 %)
+        run: pnpm --filter @rootcamp/logic test:coverage
+
+      - run: pnpm content:validate
+
+      - run: pnpm build
+
+  images:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose stand
+        run: docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml config --quiet
+
+      - name: Build images
+        run: docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml build
