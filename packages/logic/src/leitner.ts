@@ -1,7 +1,5 @@
 import { addDays, diffDays } from './dates.js';
-import type { DateKey, LeitnerItem, ReviewItems } from './types.js';
-
-type TaskId = string;
+import type { DateKey, LeitnerItem, ReviewItems, TaskId } from './types.js';
 
 /** Days until the next review for each box (§7.6). */
 export const INTERVAL = { 1: 1, 2: 3, 3: 7 } as const;

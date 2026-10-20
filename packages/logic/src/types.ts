@@ -1,7 +1,7 @@
 /** Calendar day "YYYY-MM-DD" in the user's IANA time zone (see `toDateKey`). */
 export type DateKey = string;
 
-type TaskId = string;
+export type TaskId = string;
 type LessonId = string;
 
 export interface Hearts {

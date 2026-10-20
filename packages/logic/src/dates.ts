@@ -86,8 +86,10 @@ export function localTimeOn(key: DateKey, hour: number, minute: number, tz: stri
   if (firstOffset === guessOffset) return first;
   // Offset changed between the guess and the result: retry once with the new offset.
   const second = wall - firstOffset;
-  // If the retry lands on yet another offset, the wall time falls in a DST gap: keep the later instant.
-  return tzOffset(second, tz) === firstOffset ? second : first;
+  if (tzOffset(second, tz) === firstOffset) return second;
+  // The retry lands on yet another offset: the wall time falls in a DST gap.
+  // Of the two candidates, the later one is after the gap (shifted forward) in any zone.
+  return Math.max(first, second);
 }
 
 export function isDateKey(x: unknown): x is DateKey {

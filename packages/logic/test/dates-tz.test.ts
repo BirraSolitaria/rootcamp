@@ -27,6 +27,19 @@ describe('localTimeOn across DST', () => {
   it('evening after fall-back uses standard time', () => {
     expect(localTimeOn('2026-11-01', 20, 0, 'America/New_York')).toBe(Date.UTC(2026, 10, 2, 1, 0));
   });
+  it('nonexistent 02:30 in Berlin (UTC+, gap 02:00→03:00) shifts forward on the same day', () => {
+    const t = localTimeOn('2026-03-29', 2, 30, 'Europe/Berlin');
+    expect(toDateKey(t, 'Europe/Berlin')).toBe('2026-03-29');
+    // 01:59 CET = 00:59Z is the last local minute before the gap.
+    expect(t).toBeGreaterThanOrEqual(Date.UTC(2026, 2, 29, 0, 59));
+    expect(t).toBe(Date.UTC(2026, 2, 29, 1, 30)); // 03:30 CEST
+  });
+  it('nonexistent 00:30 in Cairo (gap at midnight) stays on that day, not the previous one', () => {
+    const t = localTimeOn('2026-04-24', 0, 30, 'Africa/Cairo');
+    expect(toDateKey(t, 'Africa/Cairo')).toBe('2026-04-24');
+    // 23:59 EET on 2026-04-23 = 21:59Z is the last local minute before the gap.
+    expect(t).toBeGreaterThanOrEqual(Date.UTC(2026, 3, 23, 21, 59));
+  });
   it('plain day in a positive-offset zone', () => {
     expect(localTimeOn('2026-10-20', 9, 15, 'Europe/Moscow')).toBe(Date.UTC(2026, 9, 20, 6, 15));
   });
@@ -41,6 +54,18 @@ describe('isValidTimeZone', () => {
 });
 
 describe('grantReward', () => {
+  it('credits the local day in a far-east zone (Vladivostok 00:30 local = previous UTC day)', () => {
+    const today = toDateKey(Date.UTC(2026, 9, 20, 14, 30), 'Asia/Vladivostok');
+    expect(today).toBe('2026-10-21');
+    const r = grantReward({
+      streak: { current: 4, best: 4, lastActivityDate: '2026-10-20' },
+      xpToday: 0,
+      xp: 15,
+      today,
+    });
+    expect(r).toMatchObject({ xp: 15, xpToday: 15, goalJustReached: false, streakIncreased: true });
+    expect(r.streak).toEqual({ current: 5, best: 5, lastActivityDate: '2026-10-21' });
+  });
   it('adds xp to today, reaches the daily goal and extends the streak', () => {
     const r = grantReward({
       streak: { current: 2, best: 2, lastActivityDate: '2026-10-19' },
