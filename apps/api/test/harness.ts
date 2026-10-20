@@ -1,6 +1,7 @@
 // Integration test harness (spec §10.2): real PostgreSQL 16 with migrations and Mailpit as SMTP,
 // both via Testcontainers, one set per test file. Between tests every public table is TRUNCATEd
-// (CASCADE), default settings are re-seeded, the mailbox is emptied and the clock is reset.
+// (CASCADE), default settings are re-seeded, the mailbox is emptied, the clock is reset and the
+// app is rebuilt from its factory (no in-memory state survives a test).
 //
 //   const h = useHarness();            // registers beforeAll / beforeEach / afterAll
 //   it('...', async () => { const { app, db, mail, clock } = h(); ... });
@@ -14,9 +15,12 @@ import {
   type Db,
   type DbHandle,
 } from '@rootcamp/db';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
+import { buildApp, type AppDeps } from '../src/app.js';
+import { loadConfig } from '../src/config.js';
+import type { Limits, Mailer } from '../src/types.js';
 
 /** Same images as infra/versions.env. */
 export const POSTGRES_IMAGE = 'postgres:16';
@@ -27,6 +31,9 @@ export const MIGRATIONS_DIR = fileURLToPath(new URL('../drizzle', import.meta.ur
 
 /** Clock start for every test: Tue 2026-10-20 09:00:00Z (12:00 MSK). */
 export const DEFAULT_START = Date.UTC(2026, 9, 20, 9, 0, 0);
+
+/** `PUBLIC_ORIGIN` of the app under test; send it as `Origin` with `X-RC: 1` on mutations. */
+export const TEST_PUBLIC_ORIGIN = 'http://127.0.0.1:8080';
 
 type Sql = DbHandle['sql'];
 
@@ -48,7 +55,7 @@ export interface Clock {
   advance(ms: number): void;
 }
 
-/** Everything an app factory may need; Task 3 maps this onto `AppDeps` for `buildApp`. */
+/** Everything an app factory may need; `harnessAppDeps` maps it onto `AppDeps` for `buildApp`. */
 export interface HarnessDeps {
   db: Db;
   sql: Sql;
@@ -58,22 +65,28 @@ export interface HarnessDeps {
   smtp: { host: string; port: number };
   mailpitUrl: string;
   /** Rate-limit overrides (R-M2-3), forwarded verbatim from `HarnessOpts.limits`. */
-  limits?: Record<string, unknown>;
+  limits?: Limits;
 }
 
 export type AppFactory = (deps: HarnessDeps) => FastifyInstance | Promise<FastifyInstance>;
 
 export interface HarnessOpts {
-  /** Builds the app under test. Default: a bare Fastify instance (replaced by `buildApp` in Task 3). */
+  /**
+   * Builds the app under test; called again on every `reset()` so in-memory state (rate-limit
+   * counters, caches) never leaks between tests. Default: `buildApp(harnessAppDeps(deps))`.
+   */
   appFactory?: AppFactory;
   /** Rate-limit overrides forwarded to the factory (R-M2-3). */
-  limits?: Record<string, unknown>;
+  limits?: Limits;
   /** Clock value at the start of every test. Default: `DEFAULT_START`. */
   startTime?: number;
 }
 
 export interface Harness {
-  app: FastifyInstance;
+  /** The app built for the current test (rebuilt by `reset()`). */
+  readonly app: FastifyInstance;
+  /** What the factory receives; handy for building a second app inside a test. */
+  deps: HarnessDeps;
   db: Db;
   sql: Sql;
   databaseUrl: string;
@@ -87,12 +100,58 @@ export interface Harness {
     clear(): Promise<void>;
   };
   clock: Clock;
-  /** TRUNCATE all public tables, re-seed default settings, empty the mailbox, reset the clock. */
+  /**
+   * Rebuild the app from the factory, TRUNCATE all public tables, re-seed default settings,
+   * empty the mailbox, reset the clock.
+   */
   reset(): Promise<void>;
   close(): Promise<void>;
 }
 
-const defaultAppFactory: AppFactory = () => Fastify({ logger: false });
+/** Mailer that hands messages to Mailpit through its HTTP send API (Task 4 may switch to SMTP). */
+function mailpitMailer(mailpitUrl: string): Mailer {
+  return {
+    async send(msg) {
+      const res = await fetch(`${mailpitUrl}/api/v1/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          From: { Email: 'noreply@rootcamp.test' },
+          To: [{ Email: msg.to }],
+          Subject: msg.subject,
+          Text: msg.text,
+          HTML: msg.html,
+        }),
+      });
+      if (!res.ok) throw new Error(`Mailpit send: ${res.status}`);
+    },
+  };
+}
+
+/** Maps harness deps onto `AppDeps`: test config, harness clock, Mailpit mailer, no pg-boss. */
+export function harnessAppDeps(d: HarnessDeps): AppDeps {
+  const config = loadConfig({
+    DATABASE_URL: d.databaseUrl,
+    PUBLIC_ORIGIN: TEST_PUBLIC_ORIGIN,
+    COOKIE_SECURE: 'true',
+    SMTP_HOST: d.smtp.host,
+    SMTP_PORT: String(d.smtp.port),
+    SMTP_FROM: 'rootcamp <noreply@rootcamp.test>',
+    INTERNAL_TOKEN: 'test-internal-token-0123456789',
+    TICKET_SECRET: 'test-ticket-secret-0123456789abcdef',
+    NODE_ENV: 'test',
+  });
+  return {
+    config,
+    db: d.db,
+    now: d.now,
+    mailer: mailpitMailer(d.mailpitUrl),
+    boss: null,
+    limits: d.limits,
+  };
+}
+
+const defaultAppFactory: AppFactory = (d) => buildApp(harnessAppDeps(d));
 
 function createClock(start: number): Clock {
   let current = start;
@@ -238,7 +297,7 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
     const clock = createClock(startTime);
 
     const factory = opts.appFactory ?? defaultAppFactory;
-    const app = await factory({
+    const deps: HarnessDeps = {
       db: handle.db,
       sql: handle.sql,
       now: clock.now,
@@ -246,20 +305,30 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
       smtp: { host: hostOf(mailpit), port: mailpit.getMappedPort(1025) },
       mailpitUrl,
       limits: opts.limits,
-    });
-    await app.ready();
+    };
+    const build = async () => {
+      const built = await factory(deps);
+      await built.ready();
+      return built;
+    };
+    let app = await build();
 
     const { db, sql, close: closeDb } = handle;
     const pgC = pg;
     const mailC = mailpit;
     return {
-      app,
+      get app() {
+        return app;
+      },
+      deps,
       db,
       sql,
       databaseUrl,
       mail,
       clock,
       async reset() {
+        await app.close();
+        app = await build();
         await truncateAll(db);
         await mail.clear();
         clock.set(startTime);

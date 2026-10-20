@@ -119,6 +119,18 @@ describe('harness', () => {
     expect(res.json()).toEqual({ now: 42, limits: { login: { max: 1000 } } });
   });
 
+  let previousApp: unknown;
+  it('rebuilds the app on reset (1/2): remembers this test’s instance', () => {
+    previousApp = h().app;
+    expect(previousApp).toBeDefined();
+  });
+
+  it('rebuilds the app on reset (2/2): a fresh instance from the factory', async () => {
+    expect(h().app).not.toBe(previousApp);
+    const res = await h().app.inject({ method: 'GET', url: '/__harness' });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('mail.messages(to) returns Mailpit messages for that recipient', async () => {
     const { mail } = h();
     await mail.send({ to: 'ann@mail.ru', subject: 'Hello', text: 'verify?token=abc' });

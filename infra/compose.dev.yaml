@@ -1,5 +1,6 @@
 # Dev overlay: images built from sources, Mailpit, Caddy on :8080 without TLS.
-# Site http://localhost:8080 · Mailpit http://localhost:8025 · Postgres localhost:5432
+# Site http://127.0.0.1:8080 (the CSRF origin; not localhost) · Mailpit http://127.0.0.1:8025
+# · Postgres 127.0.0.1:5432
 services:
   postgres:
     environment:
@@ -15,6 +16,15 @@ services:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
     environment:
       DATABASE_URL: postgres://rootcamp:rootcamp@postgres:5432/rootcamp
+      # Open the site as http://127.0.0.1:8080 (R-M2-4): CSRF compares Origin with this verbatim.
+      PUBLIC_ORIGIN: http://127.0.0.1:8080
+      COOKIE_SECURE: 'false'
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_FROM: rootcamp <noreply@rootcamp.local>
+      # Dev-only placeholders; production values come from the server's env file.
+      INTERNAL_TOKEN: dev-internal-token-not-secret
+      TICKET_SECRET: dev-ticket-secret-not-secret-0123456789
 
   caddy:
     build:

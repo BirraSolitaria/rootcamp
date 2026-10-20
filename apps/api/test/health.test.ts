@@ -1,24 +1,29 @@
+import { createDb } from '@rootcamp/db';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { harnessAppDeps, useHarness } from './harness.js';
 
-function appWithPing(result: boolean) {
-  return buildApp({ db: { ping: async () => result } });
-}
+const h = useHarness();
 
 describe('GET /api/health', () => {
   it('returns 200 {db:true} when the database answers', async () => {
-    const app = appWithPing(true);
-    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    const res = await h().app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ db: true });
-    await app.close();
   });
 
   it('returns 503 {db:false} when the database is unreachable', async () => {
-    const app = appWithPing(false);
-    const res = await app.inject({ method: 'GET', url: '/api/health' });
-    expect(res.statusCode).toBe(503);
-    expect(res.json()).toEqual({ db: false });
-    await app.close();
+    // Nothing listens on port 1: the connection is refused immediately.
+    const dead = createDb('postgres://u:p@127.0.0.1:1/x', { max: 1 });
+    const deps = harnessAppDeps({ ...h().deps, db: dead.db });
+    const app = await buildApp(deps);
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/health' });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ db: false });
+    } finally {
+      await app.close();
+      await dead.close();
+    }
   });
 });
