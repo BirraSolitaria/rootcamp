@@ -1,0 +1,32 @@
+import type { FastifyBaseLogger } from 'fastify';
+import PgBoss from 'pg-boss';
+import type { Config } from '../config.js';
+import { EMAIL_QUEUE } from '../services/mailer.js';
+
+/** pg-boss keeps its tables in this schema of the app database. */
+export const BOSS_SCHEMA = 'pgboss';
+
+/**
+ * Starts pg-boss on `DATABASE_URL` (own small `pg` pool, schema `pgboss`, created/migrated by
+ * pg-boss itself) and ensures the `email` queue exists with built-in retry off — the email job
+ * runs its own retry ladder (`jobs/email.ts`).
+ */
+export async function startBoss(
+  config: Pick<Config, 'DATABASE_URL'>,
+  log?: Pick<FastifyBaseLogger, 'error'>,
+): Promise<PgBoss> {
+  const boss = new PgBoss({
+    connectionString: config.DATABASE_URL,
+    schema: BOSS_SCHEMA,
+    max: 4,
+    retryLimit: 0,
+  });
+  // Without a listener an 'error' event (e.g. a lost connection in maintenance) would crash.
+  boss.on('error', (err) => {
+    if (log) log.error({ err }, 'pg-boss error');
+    else console.error('pg-boss error:', err);
+  });
+  await boss.start();
+  await boss.createQueue(EMAIL_QUEUE, { name: EMAIL_QUEUE, retryLimit: 0 });
+  return boss;
+}

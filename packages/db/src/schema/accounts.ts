@@ -101,6 +101,13 @@ export const emailLog = pgTable(
     lastError: text('last_error'),
     createdAt: tstz('created_at').notNull().defaultNow(),
     sentAt: tstz('sent_at'),
+    /** Address the letter goes to; kept after delivery for diagnostics (§9). */
+    recipient: text('recipient'),
+    // The letter itself while it awaits delivery (the queue job carries only `id`). Cleared once
+    // the row is `sent` or `failed`: bodies may hold one-time links.
+    subject: text('subject'),
+    textBody: text('text_body'),
+    htmlBody: text('html_body'),
   },
   (t) => [index('email_log_user_id_idx').on(t.userId)],
 );

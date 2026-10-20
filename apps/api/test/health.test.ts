@@ -6,10 +6,10 @@ import { harnessAppDeps, useHarness } from './harness.js';
 const h = useHarness();
 
 describe('GET /api/health', () => {
-  it('returns 200 {db:true} when the database answers', async () => {
+  it('returns 200 {db:true, smtpLastOkAt:null} when the database answers', async () => {
     const res = await h().app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ db: true });
+    expect(res.json()).toEqual({ db: true, smtpLastOkAt: null });
   });
 
   it('returns 503 {db:false} when the database is unreachable', async () => {
@@ -20,7 +20,7 @@ describe('GET /api/health', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/api/health' });
       expect(res.statusCode).toBe(503);
-      expect(res.json()).toEqual({ db: false });
+      expect(res.json()).toEqual({ db: false, smtpLastOkAt: null });
     } finally {
       await app.close();
       await dead.close();

@@ -8,6 +8,13 @@
       "when": 1792524390502,
       "tag": "0000_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792531855809,
+      "tag": "0001_email_queue",
+      "breakpoints": true
     }
   ]
 }

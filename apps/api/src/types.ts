@@ -1,5 +1,5 @@
 // Shared dependency types for `AppDeps`. Implementations arrive later:
-// Mailer → services/mailer.ts (Task 4, R-M2-1), pg-boss → Task 6, limiting → Task 7 (R-M2-3).
+// Mailer → services/mailer.ts (Task 4, R-M2-1), pg-boss → jobs/boss.ts, limiting → Task 7 (R-M2-3).
 
 export interface MailMessage {
   to: string;
@@ -13,14 +13,8 @@ export interface Mailer {
   send(msg: MailMessage): Promise<void>;
 }
 
-/**
- * Minimal surface of a pg-boss instance the api relies on. Task 6 adds the `pg-boss`
- * dependency and may replace this with `import type { PgBoss } from 'pg-boss'`.
- */
-export interface PgBoss {
-  send(name: string, data: object, options?: object): Promise<string | null>;
-  stop(options?: object): Promise<void>;
-}
+/** pg-boss 10 instance: started by `jobs/boss.ts`, runs the `email` queue (Task 6). */
+export type { default as PgBoss } from 'pg-boss';
 
 /** Override for one rate limit (R-M2-3); omitted fields keep the production value. */
 export interface LimitOverride {

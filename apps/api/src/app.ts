@@ -18,7 +18,7 @@ export interface AppDeps {
   /** Clock in epoch ms; tests inject a controllable one. */
   now: () => number;
   mailer: Mailer;
-  /** Job queue (Task 6); null → emails are sent inline (R-M2-1). */
+  /** pg-boss (`jobs/boss.ts`); null → emails are sent inline, one attempt (tests, R-M2-1). */
   boss: PgBoss | null;
   /** Rate-limit overrides (R-M2-3); production values when omitted. */
   limits?: Limits;
