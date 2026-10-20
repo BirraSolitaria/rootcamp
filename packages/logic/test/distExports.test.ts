@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
@@ -18,7 +18,8 @@ function plainNode(script: string): string {
 }
 
 test('built @rootcamp/logic resolves to dist and loads under plain node', () => {
-  execFileSync('pnpm', ['--filter', '@rootcamp/logic...', 'build'], { cwd: PKG, stdio: 'pipe' });
+  // Via shell so Windows resolves the pnpm.cmd shim (execFile can't spawn .cmd).
+  execSync('pnpm --filter @rootcamp/logic... build', { cwd: PKG, stdio: 'pipe' });
   const out = JSON.parse(
     plainNode(`
       const logic = await import('@rootcamp/logic');
