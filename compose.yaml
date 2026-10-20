@@ -1,0 +1,9 @@
+# Root entry point: `docker compose up --build` here starts the dev stand
+# (same as `pnpm dev:up`). Paths inside the included files stay relative to infra/.
+name: rootcamp
+
+include:
+  - path:
+      - infra/compose.yaml
+      - infra/compose.dev.yaml
+    env_file: infra/versions.env

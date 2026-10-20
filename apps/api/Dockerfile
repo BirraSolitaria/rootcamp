@@ -16,7 +16,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch --frozen-lockfile
 COPY . .
 RUN pnpm install --offline --frozen-lockfile --ignore-scripts --filter @rootcamp/api...
-RUN pnpm --filter @rootcamp/api build
+# `...` builds workspace dependencies first (topological order): the deployed api
+# loads them from their dist/ via package.json exports.
+RUN pnpm --filter "@rootcamp/api..." build
 RUN pnpm --filter @rootcamp/api deploy --prod --ignore-scripts /out
 
 FROM ${NODE_IMAGE} AS runtime

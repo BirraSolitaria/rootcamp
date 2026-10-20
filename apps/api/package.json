@@ -9,12 +9,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --conditions=rootcamp-src src/server.ts",
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@rootcamp/logic": "workspace:*",
     "fastify": "5.12.7",
     "pg": "8.23.1"
   },

@@ -1,5 +1,6 @@
 # Base service set shared by every stand (dev, e2e, production).
-# Dev: docker compose -f infra/compose.yaml -f infra/compose.dev.yaml up --build
+# Dev: `docker compose up --build` from the repo root (root compose.yaml includes this
+# file + compose.dev.yaml with versions.env), or `pnpm dev:up`.
 # Production-only services (apt-mirror, registry, dnsmasq, backup, sandboxd) arrive in M4b/M6.
 name: rootcamp
 

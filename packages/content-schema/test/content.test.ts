@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { loadContentTree, validateContent } from '../src/index.js';
+import { loadContentTree, validateContent } from '../src/node.js';
 
 const CONTENT = fileURLToPath(new URL('../../../content', import.meta.url));
 

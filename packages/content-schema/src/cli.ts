@@ -1,8 +1,11 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadContentTree } from './load.js';
-import { defaultShellcheck, type ShellcheckRunner } from './shellcheck.js';
-import { validateContent } from './validate.js';
+import {
+  defaultShellcheck,
+  loadContentTree,
+  validateContent,
+  type ShellcheckRunner,
+} from './node.js';
 
 export interface CliDeps {
   shellcheck: ShellcheckRunner;

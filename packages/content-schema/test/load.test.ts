@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, test } from 'vitest';
-import { loadContentTree } from '../src/index.js';
+import { loadContentTree } from '../src/node.js';
 
 const MINI = fileURLToPath(new URL('./fixtures/mini', import.meta.url));
 const MINI_CONTENT = join(MINI, 'content');

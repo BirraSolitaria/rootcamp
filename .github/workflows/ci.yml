@@ -49,5 +49,8 @@ jobs:
       - name: Validate compose stand
         run: docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml config --quiet
 
+      - name: Validate root compose entry point
+        run: docker compose config --quiet
+
       - name: Build images
         run: docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml build

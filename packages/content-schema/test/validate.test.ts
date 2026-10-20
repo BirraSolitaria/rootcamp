@@ -7,7 +7,7 @@ import {
   type ContentTree,
   type ExecFn,
   type ShellcheckRunner,
-} from '../src/index.js';
+} from '../src/node.js';
 import { runCli } from '../src/cli.js';
 
 const MINI = fileURLToPath(new URL('./fixtures/mini', import.meta.url));

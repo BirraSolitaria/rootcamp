@@ -1,5 +1,7 @@
+import { MAX_HEARTS } from '@rootcamp/logic';
 import pg from 'pg';
 import { buildApp } from './app.js';
+import { parsePort } from './config.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -7,7 +9,13 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const port = Number(process.env.PORT ?? 3000);
+let port: number;
+try {
+  port = parsePort(process.env.PORT);
+} catch (err) {
+  console.error((err as Error).message);
+  process.exit(1);
+}
 const host = process.env.HOST ?? '0.0.0.0';
 
 const pool = new pg.Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 2000 });
@@ -29,12 +37,25 @@ const app = buildApp({
 
 async function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);
-  await app.close();
-  await pool.end();
-  process.exit(0);
+  let exitCode = 0;
+  try {
+    await app.close();
+  } catch (err) {
+    console.error('error closing http server:', (err as Error).message);
+    exitCode = 1;
+  } finally {
+    try {
+      await pool.end();
+    } catch (err) {
+      console.error('error closing pg pool:', (err as Error).message);
+      exitCode = 1;
+    }
+  }
+  process.exit(exitCode);
 }
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 process.once('SIGINT', () => void shutdown('SIGINT'));
 
 await app.listen({ port, host });
-console.log(`api listening on http://${host}:${port}`);
+// Uses @rootcamp/logic at runtime so the built image exercises workspace-package resolution.
+console.log(`api listening on http://${host}:${port} (logic: MAX_HEARTS=${MAX_HEARTS})`);

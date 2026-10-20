@@ -41,6 +41,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@rootcamp/logic':
+        specifier: workspace:*
+        version: link:../../packages/logic
       fastify:
         specifier: 5.12.7
         version: 5.12.7
