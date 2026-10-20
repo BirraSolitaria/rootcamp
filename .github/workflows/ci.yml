@@ -32,14 +32,69 @@ jobs:
 
       - run: pnpm typecheck
 
-      - run: pnpm test
+      # Unit tests. @rootcamp/api (Testcontainers) runs in `integration`; @rootcamp/logic runs
+      # once, under coverage, in the next step.
+      - name: Unit tests
+        run: pnpm turbo run test --filter='!@rootcamp/api' --filter='!@rootcamp/logic'
 
-      - name: Coverage gate (@rootcamp/logic lines >= 95 %)
-        run: pnpm --filter @rootcamp/logic test:coverage
+      - name: Logic tests with coverage gate (@rootcamp/logic lines >= 95 %)
+        run: pnpm turbo run test:coverage --filter=@rootcamp/logic
 
       - run: pnpm content:validate
 
       - run: pnpm build
+
+  integration:
+    # api suites against real PostgreSQL + Mailpit via Testcontainers (Docker is on the runner).
+    runs-on: ubuntu-24.04
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: api integration tests (Testcontainers)
+        run: pnpm turbo run test --filter=@rootcamp/api
+
+  e2e:
+    # infra/compose.e2e.yaml stand + Playwright (mobile and desktop projects), spec §10.4.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm --filter @rootcamp/e2e exec playwright install --with-deps chromium
+
+      # Builds the images, runs Playwright, always tears the stand down (`down -v`).
+      - run: pnpm e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
 
   images:
     runs-on: ubuntu-24.04
@@ -48,6 +103,9 @@ jobs:
 
       - name: Validate compose stand
         run: docker compose --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.dev.yaml config --quiet
+
+      - name: Validate e2e compose stand
+        run: docker compose -p rootcamp-e2e --env-file infra/versions.env -f infra/compose.yaml -f infra/compose.e2e.yaml config --quiet
 
       - name: Validate root compose entry point
         run: docker compose config --quiet

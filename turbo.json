@@ -19,6 +19,10 @@
     "@rootcamp/logic#test": {
       "dependsOn": ["build", "^build"],
       "outputs": []
+    },
+    "@rootcamp/logic#test:coverage": {
+      "dependsOn": ["build", "^build"],
+      "outputs": ["coverage/**"]
     }
   }
 }

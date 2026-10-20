@@ -1,0 +1,73 @@
+# E2E overlay (spec §10.4): images built from sources, Mailpit, Caddy on :8081 without TLS.
+# Always used on top of compose.yaml under its own project name, so it never touches the dev
+# stand (8080/8025/5432) — `pnpm e2e` runs:
+#   docker compose -p rootcamp-e2e --env-file infra/versions.env \
+#     -f infra/compose.yaml -f infra/compose.e2e.yaml up -d --build --wait
+# Site http://127.0.0.1:8081 (R-M2-4: not localhost) · Mailpit http://127.0.0.1:8026
+# Postgres is not published. Rate limits are the production ones: the registration scenario
+# registers once per Playwright project (2 per run from one IP, under `register` 3/h), and
+# `down -v` + a fresh api process reset the in-memory counters between runs.
+name: rootcamp-e2e
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: rootcamp-e2e
+
+  api:
+    # Own tags: an e2e build must not retag the dev stand's rootcamp/*:local images.
+    image: rootcamp/api:e2e
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    environment:
+      DATABASE_URL: postgres://rootcamp:rootcamp-e2e@postgres:5432/rootcamp
+      # CSRF compares Origin with this verbatim; Playwright's baseURL is the same string.
+      PUBLIC_ORIGIN: http://127.0.0.1:8081
+      NODE_ENV: test
+      COOKIE_SECURE: 'false'
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_FROM: rootcamp <noreply@rootcamp.test>
+      # Throwaway values for a disposable stand.
+      INTERNAL_TOKEN: e2e-internal-token-not-secret
+      TICKET_SECRET: e2e-ticket-secret-not-secret-0123456789
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+  caddy:
+    image: rootcamp/web:e2e
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    volumes:
+      # Same site config as dev: plain http on :8080 inside the container.
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    ports:
+      - '127.0.0.1:8081:8080'
+    # `up --wait` returns only once the whole chain (Caddy → api → Postgres) answers.
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/api/health']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.27}
+    networks: [rc-internal]
+    environment:
+      # Otherwise Mailpit reverse-resolves every SMTP client and greets ~1 s late.
+      MP_SMTP_DISABLE_RDNS: 'true'
+    ports:
+      - '127.0.0.1:8026:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 2s
+      timeout: 3s
+      retries: 30
