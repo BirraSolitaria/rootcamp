@@ -485,6 +485,47 @@ describe('POST /api/auth/forgot + /api/auth/reset', () => {
     expect(errorOf(res).code).toBe('token_expired');
   });
 
+  it('invalid, used and expired tokens are refused before argon2 hashes the password', async () => {
+    const argon2 = (await import('argon2')).default;
+    await register(ann);
+    await post('/api/auth/forgot', { email: ann.email });
+    const used = resetTokenFrom((await h().mail.waitForMessages('ann@mail.ru', 2))[1]!);
+    expect(
+      (await post('/api/auth/reset', { token: used, password: 'brand new password' })).statusCode,
+    ).toBe(204);
+    await post('/api/auth/forgot', { email: ann.email });
+    const expired = resetTokenFrom((await h().mail.waitForMessages('ann@mail.ru', 3))[2]!);
+    h().clock.advance(HOUR_MS + 1);
+
+    const spy = vi.spyOn(argon2, 'hash');
+    try {
+      const cases = [
+        { token: 'A'.repeat(43), code: 'token_invalid', status: 400 },
+        { token: used, code: 'token_used', status: 409 },
+        { token: expired, code: 'token_expired', status: 400 },
+      ];
+      for (const c of cases) {
+        const res = await post('/api/auth/reset', { token: c.token, password: 'another password' });
+        expect(res.statusCode).toBe(c.status);
+        expect(errorOf(res).code).toBe(c.code);
+      }
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a valid token is consumed once even when two resets race', async () => {
+    await register(ann);
+    await post('/api/auth/forgot', { email: ann.email });
+    const token = resetTokenFrom((await h().mail.waitForMessages('ann@mail.ru', 2))[1]!);
+    const [a, b] = await Promise.all([
+      post('/api/auth/reset', { token, password: 'first new password' }),
+      post('/api/auth/reset', { token, password: 'second new password' }),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([204, 409]);
+  });
+
   it('short new password → 400 validation', async () => {
     const res = await post('/api/auth/reset', { token: 'x', password: 'short' });
     expect(res.statusCode).toBe(400);

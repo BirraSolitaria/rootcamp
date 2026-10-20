@@ -7,7 +7,7 @@ import { resetEmail, tokenLink, verifyEmail } from '../mail/templates.js';
 import { HttpError } from '../plugins/errors.js';
 import { enforce } from '../plugins/rateLimit.js';
 import { clearSessionCookie, SESSION_COOKIE, setSessionCookie } from '../plugins/session.js';
-import { consumeEmailToken, issueEmailToken } from '../services/emailTokens.js';
+import { checkEmailToken, consumeEmailToken, issueEmailToken } from '../services/emailTokens.js';
 import type { Limiters } from '../services/limiter.js';
 import { enqueueEmail } from '../services/mailer.js';
 import { createSession, revokeAllSessions, revokeSession } from '../services/sessions.js';
@@ -147,14 +147,21 @@ export async function authRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
   );
 
   // One-time 1 h link; sets the new password and signs the user out everywhere.
-  app.post('/api/auth/reset', { config: { public: true } }, async (req, reply) => {
-    const body = ResetBody.parse(req.body);
-    const passwordHash = await hashPassword(body.password);
-    await db.transaction(async (tx) => {
-      const { userId } = await consumeEmailToken(tx, body.token, 'reset', now());
-      await tx.update(users).set({ passwordHash }).where(eq(users.id, userId));
-      await revokeAllSessions(tx, userId);
-    });
-    return reply.code(204).send();
-  });
+  // 10/h per IP (rate-limit plugin). The token is checked before argon2 runs, so a bad link
+  // costs no hashing; the conditional UPDATE in consumeEmailToken stays the one-time authority.
+  app.post(
+    '/api/auth/reset',
+    { config: { public: true, rateLimit: 'reset' } },
+    async (req, reply) => {
+      const body = ResetBody.parse(req.body);
+      await checkEmailToken(db, body.token, 'reset', now());
+      const passwordHash = await hashPassword(body.password);
+      await db.transaction(async (tx) => {
+        const { userId } = await consumeEmailToken(tx, body.token, 'reset', now());
+        await tx.update(users).set({ passwordHash }).where(eq(users.id, userId));
+        await revokeAllSessions(tx, userId);
+      });
+      return reply.code(204).send();
+    },
+  );
 }

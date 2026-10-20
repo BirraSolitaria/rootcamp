@@ -76,11 +76,27 @@ export async function consumeEmailToken(
     .returning({ userId: emailTokens.userId });
   if (used) return used;
 
+  await checkEmailToken(db, token, kind, now);
+  // The token looked usable but the UPDATE missed: another request consumed it in between.
+  throw new HttpError(409, 'token_used', 'link was already used');
+}
+
+/**
+ * Read-only pre-check: throws the error `consumeEmailToken` would for an unusable token
+ * (`400 token_invalid`, `409 token_used`, `400 token_expired`) and changes nothing. A token that
+ * passes may still lose a race, so `consumeEmailToken` stays the one-time authority.
+ */
+export async function checkEmailToken(
+  db: Executor,
+  token: string,
+  kind: EmailTokenKind,
+  now: number,
+): Promise<void> {
   const [row] = await db
-    .select({ usedAt: emailTokens.usedAt })
+    .select({ usedAt: emailTokens.usedAt, expiresAt: emailTokens.expiresAt })
     .from(emailTokens)
-    .where(and(eq(emailTokens.tokenHash, tokenHash), eq(emailTokens.kind, kind)));
+    .where(and(eq(emailTokens.tokenHash, hashToken(token)), eq(emailTokens.kind, kind)));
   if (!row) throw new HttpError(400, 'token_invalid', 'link is invalid');
   if (row.usedAt) throw new HttpError(409, 'token_used', 'link was already used');
-  throw new HttpError(400, 'token_expired', 'link has expired');
+  if (row.expiresAt.getTime() < now) throw new HttpError(400, 'token_expired', 'link has expired');
 }

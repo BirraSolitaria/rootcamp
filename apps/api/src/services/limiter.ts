@@ -29,6 +29,11 @@ export const LIMITS = {
   /** `POST /api/auth/forgot`: 3/h per IP. */
   forgotIp: { max: 3, windowMs: HOUR_MS },
   /**
+   * `POST /api/auth/reset`: 10/h per IP, counted before the body is read. Not in the spec;
+   * chosen in the M2 final review to cap argon2 work per IP while leaving room for retyping.
+   */
+  resetIp: { max: 10, windowMs: HOUR_MS },
+  /**
    * `POST /api/me/password` (guesses of `current` from a stolen session): 5/min and 20/h per
    * user. Not in the spec; chosen in Task 7 to match the login budget.
    */
@@ -122,6 +127,7 @@ export interface Limiters {
   loginEmail: Limiter;
   registerIp: Limiter;
   forgotIp: Limiter;
+  resetIp: Limiter;
   /** Key: userId. */
   changePassword: Limiter;
   /**
@@ -139,6 +145,7 @@ export function createLimiters(overrides?: Limits): Limiters {
     loginEmail: one('loginEmail'),
     registerIp: one('registerIp'),
     forgotIp: one('forgotIp'),
+    resetIp: one('resetIp'),
     changePassword: allOf(one('changePasswordMinute'), one('changePasswordHour')),
     verifyLetters: allOf(one('resendVerificationMinute'), one('resendVerificationDay')),
   };

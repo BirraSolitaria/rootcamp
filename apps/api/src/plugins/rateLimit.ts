@@ -4,7 +4,7 @@ import type { Limiter, Limiters } from '../services/limiter.js';
 import { rateLimited } from './errors.js';
 
 /** Per-IP route limits (spec §6.3); set with `config: { rateLimit: 'login' }`. */
-export type RouteLimit = 'login' | 'register' | 'forgot';
+export type RouteLimit = 'login' | 'register' | 'forgot' | 'reset';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -29,8 +29,8 @@ export function enforce(limiter: Limiter, key: string, now: number, message?: st
 /**
  * Request rate limits, all in-memory sliding windows on the app's clock (`deps.now`):
  * - global 300/min keyed by `userId ?? ip` (runs after `session`, so `req.user` is known);
- * - per-IP route limits from `config.rateLimit` (login, register, forgot), checked before the
- *   body is parsed, so a refused register never reaches argon2.
+ * - per-IP route limits from `config.rateLimit` (login, register, forgot, reset), checked
+ *   before the body is parsed, so a refused register or reset never reaches argon2.
  * Per-key limits that need the body or the user (login per email, password change, verify
  * letters) are enforced in their handlers with `enforce`.
  *
@@ -44,6 +44,7 @@ export default fp(
       login: limiters.loginIp,
       register: limiters.registerIp,
       forgot: limiters.forgotIp,
+      reset: limiters.resetIp,
     };
 
     app.addHook('onRequest', async (req) => {

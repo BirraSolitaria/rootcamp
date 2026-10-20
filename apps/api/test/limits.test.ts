@@ -146,6 +146,21 @@ describe('forgot: 3/h per IP', () => {
   });
 });
 
+describe('reset: 10/h per IP', () => {
+  it('11th request within an hour → 429; another IP is unaffected; after 61 min → OK', async () => {
+    const { clock } = h();
+    const body = { token: 'A'.repeat(43), password: PASSWORD };
+    for (let i = 0; i < 10; i++) {
+      expect(errorOf(await post('/api/auth/reset', body)).code).toBe('token_invalid');
+    }
+    expectRateLimited(await post('/api/auth/reset', body));
+    expect(errorOf(await post('/api/auth/reset', body, '203.0.113.9')).code).toBe('token_invalid');
+
+    clock.advance(61 * MINUTE_MS);
+    expect(errorOf(await post('/api/auth/reset', body)).code).toBe('token_invalid');
+  });
+});
+
 describe('POST /api/me/password: 5/min and 20/h per user', () => {
   const change = (cookies: Record<string, string>, ip: string, current = 'wrong password') =>
     post('/api/me/password', { current, next: 'brand new password' }, ip, cookies);

@@ -123,6 +123,7 @@ export const TEST_LIMITS: Limits = {
   loginEmail: GENEROUS,
   registerIp: GENEROUS,
   forgotIp: GENEROUS,
+  resetIp: GENEROUS,
   changePasswordMinute: GENEROUS,
   changePasswordHour: GENEROUS,
 };
