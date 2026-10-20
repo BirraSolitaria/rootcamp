@@ -3,6 +3,7 @@ import { users } from '@rootcamp/db';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { HttpError } from '../plugins/errors.js';
+import { enforce } from '../plugins/rateLimit.js';
 import { SESSION_COOKIE } from '../plugins/session.js';
 import { getMe, updateMe } from '../services/me.js';
 import { revokeAllSessions } from '../services/sessions.js';
@@ -11,7 +12,7 @@ import { sendTokenEmail, type AuthRouteDeps } from './auth.js';
 
 /** `GET|PATCH /api/me`, `POST /api/me/password`. All require a session. */
 export async function meRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
-  const { db, now, verifyLetters } = deps;
+  const { db, now, limiters } = deps;
 
   app.get('/api/me', async (req) => getMe(db, req.user!.id, now()));
 
@@ -28,12 +29,8 @@ export async function meRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
     // A new address means a verify letter: same per-user budget as resend-verification.
     // (A confirmed user gets 409 from updateMe and spends nothing.)
     const at = now();
-    if (
-      patch.email !== undefined &&
-      !sessionUser.emailVerified &&
-      !verifyLetters.hit(sessionUser.id, at)
-    ) {
-      throw new HttpError(429, 'rate_limited', 'too many letters, try again later');
+    if (patch.email !== undefined && !sessionUser.emailVerified) {
+      enforce(limiters.verifyLetters, sessionUser.id, at, 'too many letters, try again later');
     }
     const { user, verifyToken } = await updateMe(db, sessionUser.id, patch, at);
     if (verifyToken) await sendTokenEmail(deps, 'verify', user, verifyToken, req.log);
@@ -41,8 +38,11 @@ export async function meRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
   });
 
   // Checks `current`, sets `next` and signs out every other session (this one stays).
+  // 5/min and 20/h per user, counted before `current` is checked: a stolen session must not
+  // become an unlimited password-guessing oracle.
   app.post('/api/me/password', async (req, reply) => {
     const body = ChangePasswordBody.parse(req.body);
+    enforce(limiters.changePassword, req.user!.id, now());
     const user = await findUserById(db, req.user!.id);
     if (!user) throw new HttpError(401, 'unauthorized', 'sign in required');
     if (!(await verifyPassword(user.passwordHash, body.current))) {

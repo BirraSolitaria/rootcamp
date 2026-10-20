@@ -88,6 +88,16 @@ const ConfigSchema = z.object({
     z.enum(['development', 'test', 'production']).default('production'),
   ),
   PORT: port(DEFAULT_PORT),
+  /**
+   * Reverse proxies in front of the api that append the client address to X-Forwarded-For.
+   * 1 (default): Caddy, which overwrites X-Forwarded-For from untrusted clients; `req.ip` is
+   * the address Caddy saw. 0: the api is reached directly and X-Forwarded-For is ignored
+   * (otherwise any client could pick its own IP and dodge the per-IP rate limits).
+   */
+  TRUST_PROXY_HOPS: z.preprocess(
+    blankToUndefined,
+    z.string().regex(/^\d$/, 'must be an integer 0-9').transform(Number).default(1),
+  ),
   HOST: z.preprocess(blankToUndefined, z.string().default('0.0.0.0')),
 });
 

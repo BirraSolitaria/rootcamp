@@ -109,7 +109,28 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-/** Maps harness deps onto `AppDeps`: test config, harness clock, SMTP mailer into Mailpit, no pg-boss. */
+const GENEROUS = { max: 1_000_000 };
+
+/**
+ * Default rate limits for tests (R-M2-3): request limits are effectively off, so suites can
+ * register and log in freely from one IP. The verify-letter limits (resend-verification, email
+ * change) stay at production values: auth.test and me.test assert them. limits.test opts out
+ * with `limits: undefined` and runs on production values.
+ */
+export const TEST_LIMITS: Limits = {
+  api: GENEROUS,
+  loginIp: GENEROUS,
+  loginEmail: GENEROUS,
+  registerIp: GENEROUS,
+  forgotIp: GENEROUS,
+  changePasswordMinute: GENEROUS,
+  changePasswordHour: GENEROUS,
+};
+
+/**
+ * Maps harness deps onto `AppDeps`: test config, harness clock, SMTP mailer into Mailpit, no
+ * pg-boss, `TEST_LIMITS` with `HarnessOpts.limits` on top.
+ */
 export function harnessAppDeps(d: HarnessDeps): AppDeps {
   const config = loadConfig({
     DATABASE_URL: d.databaseUrl,
@@ -128,7 +149,7 @@ export function harnessAppDeps(d: HarnessDeps): AppDeps {
     now: d.now,
     mailer: createSmtpMailer(config),
     boss: null,
-    limits: d.limits,
+    limits: { ...TEST_LIMITS, ...d.limits },
   };
 }
 

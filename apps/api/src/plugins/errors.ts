@@ -8,6 +8,8 @@ export class HttpError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
   readonly extra: object | undefined;
+  /** Response headers sent with the error (e.g. `retry-after`). */
+  readonly headers: Record<string, string> = {};
 
   constructor(status: number, code: ErrorCode, message?: string, extra?: object) {
     super(message ?? code);
@@ -16,6 +18,16 @@ export class HttpError extends Error {
     this.code = code;
     this.extra = extra;
   }
+}
+
+/** `429 rate_limited` with `Retry-After` in whole seconds (at least 1). */
+export function rateLimited(
+  retryAfterMs: number,
+  message = 'too many requests, try again later',
+): HttpError {
+  const err = new HttpError(429, 'rate_limited', message);
+  err.headers['retry-after'] = String(Math.max(1, Math.ceil(retryAfterMs / 1000)));
+  return err;
 }
 
 /** Fastify's own 4xx errors (body parsing, content type, size) mapped onto contract codes. */
@@ -47,6 +59,7 @@ export default fp(
   async function errors(app: FastifyInstance) {
     app.setErrorHandler((err: FastifyError | Error, req, reply) => {
       if (err instanceof HttpError) {
+        reply.headers(err.headers);
         return sendError(reply, err.status, err.code, err.message, err.extra);
       }
       if (err instanceof z.ZodError) {

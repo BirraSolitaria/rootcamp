@@ -8,12 +8,13 @@ import Fastify, {
 import type { Config } from './config.js';
 import csrf from './plugins/csrf.js';
 import errors from './plugins/errors.js';
+import rateLimit from './plugins/rateLimit.js';
 import session from './plugins/session.js';
 import verifiedGuard from './plugins/verifiedGuard.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
-import { createVerifyLetterLimiter } from './services/limiter.js';
+import { createLimiters } from './services/limiter.js';
 import type { ContentStore, Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
 
 export interface AppDeps {
@@ -38,7 +39,7 @@ export interface AppDeps {
 const genReqId = () => randomBytes(6).toString('hex');
 
 /**
- * Builds the api: error mapping → CSRF → session (401 on non-public routes) → verified-email
+ * Builds the api: error mapping → CSRF → session (401 on non-public routes) → rate limits → verified-email
  * guard, then routes. Hooks run in this order on every request. Not yet `ready()`: callers may
  * add routes before the first `inject`/`listen`.
  */
@@ -48,22 +49,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ? { loggerInstance: deps.loggerInstance }
       : { logger: deps.logger ?? false }),
     genReqId,
-    // Exactly one proxy (Caddy) in front: `req.ip` is the address Caddy saw, not a value a
-    // client could inject with its own X-Forwarded-For.
-    // (Fastify's typings lack the numeric hop form, so: trust only hop 0.)
-    trustProxy: (_address: string, hop: number) => hop < 1,
+    // TRUST_PROXY_HOPS proxies (default 1: Caddy) in front: req.ip is the address the outermost
+    // trusted proxy saw, never a value the client put into its own X-Forwarded-For.
+    // (Fastify's typings lack the numeric hop form, so: trust hops below the configured count.)
+    trustProxy: (_address: string, hop: number) => hop < deps.config.TRUST_PROXY_HOPS,
   });
 
   await app.register(errors);
   await app.register(csrf, { publicOrigin: deps.config.PUBLIC_ORIGIN });
   await app.register(session, { db: deps.db, config: deps.config, now: deps.now });
+  // Per app instance: a rebuilt app starts with clean counters.
+  const limiters = createLimiters(deps.limits);
+  await app.register(rateLimit, { limiters, now: deps.now });
   await app.register(verifiedGuard);
 
   await app.register(healthRoutes, { db: deps.db });
-  // Shared so an email change cannot bypass the resend-verification limit.
-  const verifyLetters = createVerifyLetterLimiter(deps.limits);
-  await app.register(authRoutes, { ...deps, verifyLetters });
-  await app.register(meRoutes, { ...deps, verifyLetters });
+  await app.register(authRoutes, { ...deps, limiters });
+  await app.register(meRoutes, { ...deps, limiters });
 
   return app;
 }

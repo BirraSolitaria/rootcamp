@@ -92,3 +92,16 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...env, INTERNAL_TOKEN: 'short' })).toThrow(/INTERNAL_TOKEN/);
   });
 });
+
+describe('TRUST_PROXY_HOPS', () => {
+  test('defaults to 1 (Caddy in front); accepts 0..9', () => {
+    expect(loadConfig(env).TRUST_PROXY_HOPS).toBe(1);
+    expect(loadConfig({ ...env, TRUST_PROXY_HOPS: '' }).TRUST_PROXY_HOPS).toBe(1);
+    expect(loadConfig({ ...env, TRUST_PROXY_HOPS: '0' }).TRUST_PROXY_HOPS).toBe(0);
+    expect(loadConfig({ ...env, TRUST_PROXY_HOPS: '2' }).TRUST_PROXY_HOPS).toBe(2);
+  });
+
+  test.each(['-1', 'true', '1.5', '10'])('rejects %j', (value) => {
+    expect(() => loadConfig({ ...env, TRUST_PROXY_HOPS: value })).toThrow(/TRUST_PROXY_HOPS/);
+  });
+});

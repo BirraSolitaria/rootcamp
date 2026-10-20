@@ -150,6 +150,11 @@ export async function registerUser(
 ): Promise<Registration | null> {
   if (isHoneypot(body)) return null;
   if (!isValidTimeZone(body.tz)) throw new HttpError(400, 'validation', 'tz: unknown time zone');
+  // Cheap unlocked pre-check, so a closed site spends no argon2 work; the locked check below
+  // stays authoritative.
+  if ((await getSetting(db, 'registration_mode', 'open')) === 'closed') {
+    throw new HttpError(403, 'registration_closed', 'registration is closed');
+  }
 
   const passwordHash = await hashPassword(body.password);
 
