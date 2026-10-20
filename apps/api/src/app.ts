@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import type { Db } from '@rootcamp/db';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, {
+  type FastifyBaseLogger,
+  type FastifyInstance,
+  type FastifyServerOptions,
+} from 'fastify';
 import type { Config } from './config.js';
 import csrf from './plugins/csrf.js';
 import errors from './plugins/errors.js';
@@ -22,8 +26,10 @@ export interface AppDeps {
   boss: PgBoss | null;
   /** Rate-limit overrides (R-M2-3); production values when omitted. */
   limits?: Limits;
-  /** Fastify logger option; default: off. server.ts passes pino settings. */
+  /** Fastify logger option; default: off. */
   logger?: FastifyServerOptions['logger'];
+  /** A ready logger instance (server.ts shares its pino logger with pg-boss); wins over `logger`. */
+  loggerInstance?: FastifyBaseLogger;
   sandboxd?: SandboxdClient /* M4a */;
   content?: ContentStore /* M3 */;
 }
@@ -38,7 +44,9 @@ const genReqId = () => randomBytes(6).toString('hex');
  */
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: deps.logger ?? false,
+    ...(deps.loggerInstance
+      ? { loggerInstance: deps.loggerInstance }
+      : { logger: deps.logger ?? false }),
     genReqId,
     // Exactly one proxy (Caddy) in front: `req.ip` is the address Caddy saw, not a value a
     // client could inject with its own X-Forwarded-For.

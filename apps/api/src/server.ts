@@ -3,10 +3,11 @@ import { createDb, runMigrations } from '@rootcamp/db';
 import { MAX_HEARTS } from '@rootcamp/logic';
 import type { FastifyInstance } from 'fastify';
 import type PgBoss from 'pg-boss';
+import { pino } from 'pino';
 import { buildApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { startBoss } from './jobs/boss.js';
-import { startEmailWorker } from './jobs/email.js';
+import { startEmailSweeper, startEmailWorker } from './jobs/email.js';
 import { createSmtpMailer } from './services/mailer.js';
 
 /** Shipped next to dist/ (package.json `files`), so this resolves both from src/ and dist/. */
@@ -28,8 +29,12 @@ const handle = createDb(config.DATABASE_URL, { max: 10 });
 
 const mailer = createSmtpMailer(config);
 
+// One pino logger for Fastify and pg-boss (pg-boss starts before the app exists).
+const log = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug' });
+
 let app: FastifyInstance | undefined;
 let boss: PgBoss | undefined;
+let stopSweeper: (() => void) | undefined;
 let shuttingDown = false;
 
 async function shutdown(reason: string, exitCode = 0): Promise<void> {
@@ -42,6 +47,7 @@ async function shutdown(reason: string, exitCode = 0): Promise<void> {
     console.error('error closing http server:', (err as Error).message);
     exitCode = 1;
   }
+  stopSweeper?.();
   try {
     // Lets the running email job finish; queued jobs stay in `pgboss` for the next start.
     await boss?.stop({ graceful: true, wait: true, timeout: BOSS_STOP_TIMEOUT_MS });
@@ -63,17 +69,18 @@ process.once('SIGINT', () => void shutdown('SIGINT received'));
 try {
   // Serialised across replicas by an advisory lock inside runMigrations.
   await runMigrations(handle.db, MIGRATIONS_DIR);
-  boss = await startBoss(config);
+  boss = await startBoss(config, log);
   app = await buildApp({
     config,
     db: handle.db,
     now: Date.now,
     mailer,
     boss,
-    logger: { level: config.NODE_ENV === 'production' ? 'info' : 'debug' },
+    loggerInstance: log,
   });
-  const log = app.log;
-  await startEmailWorker(boss, { db: handle.db, mailer, queue: boss, now: Date.now, log });
+  const emailDeps = { db: handle.db, mailer, queue: boss, now: Date.now, log };
+  await startEmailWorker(boss, emailDeps);
+  stopSweeper = startEmailSweeper(emailDeps);
   await app.listen({ port: config.PORT, host: config.HOST });
   // Uses @rootcamp/logic at runtime so the built image exercises workspace-package resolution.
   app.log.info(`api listening on ${config.HOST}:${config.PORT} (logic: MAX_HEARTS=${MAX_HEARTS})`);

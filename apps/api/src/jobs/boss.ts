@@ -13,7 +13,7 @@ export const BOSS_SCHEMA = 'pgboss';
  */
 export async function startBoss(
   config: Pick<Config, 'DATABASE_URL'>,
-  log?: Pick<FastifyBaseLogger, 'error'>,
+  log: Pick<FastifyBaseLogger, 'error'>,
 ): Promise<PgBoss> {
   const boss = new PgBoss({
     connectionString: config.DATABASE_URL,
@@ -22,10 +22,7 @@ export async function startBoss(
     retryLimit: 0,
   });
   // Without a listener an 'error' event (e.g. a lost connection in maintenance) would crash.
-  boss.on('error', (err) => {
-    if (log) log.error({ err }, 'pg-boss error');
-    else console.error('pg-boss error:', err);
-  });
+  boss.on('error', (err) => log.error({ err }, 'pg-boss error'));
   await boss.start();
   await boss.createQueue(EMAIL_QUEUE, { name: EMAIL_QUEUE, retryLimit: 0 });
   return boss;

@@ -1,5 +1,5 @@
 import { emailLog } from '@rootcamp/db';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import nodemailer from 'nodemailer';
 import type PgBoss from 'pg-boss';
@@ -64,11 +64,33 @@ export interface OutgoingEmail extends MailMessage {
 export interface EnqueueContext {
   mailer: Mailer;
   now: () => number;
-  log?: FastifyBaseLogger;
+  log?: MailLog;
 }
+
+/** Logger surface the delivery code uses (pino / Fastify's logger fits). */
+export type MailLog = Pick<FastifyBaseLogger, 'warn' | 'error'>;
 
 const errorText = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).slice(0, 2000);
+
+/** Pauses between tries of a journal write after a letter went out (3 tries in all). */
+export const JOURNAL_RETRY_DELAYS_MS = [100, 400] as const;
+
+/** Runs `fn`, retrying after each delay in `delays` while it throws. */
+export async function withRetries<T>(
+  fn: () => Promise<T>,
+  delays: readonly number[] = JOURNAL_RETRY_DELAYS_MS,
+): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const delay = delays[i];
+      if (delay === undefined) throw err;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
 
 /** One delivery attempt of an `email_log` row (see `attemptDelivery`). */
 export type Attempt =
@@ -77,19 +99,22 @@ export type Attempt =
   | { outcome: 'error'; attempts: number; error: string; permanent: boolean };
 
 /**
- * Claims the row (`attempts + 1`, only while `queued`) and sends the stored letter. Only the
- * send itself counts as a failed attempt; marking the row `sent` is the caller's next step
- * (`markSent`), so a failure there can never schedule a duplicate letter.
+ * Claims the row and sends the stored letter. The claim is exclusive: one `UPDATE` sets
+ * `claimed_at` and `attempts + 1` only on a `queued` row nobody holds, so of two jobs for one
+ * row only one sends. The holder must write an outcome that releases the claim (`markSent`,
+ * `releaseForRetry`, `markFailed`); a claim that is never released is closed by the sweep as
+ * "outcome unknown" and never resent. Only the send itself counts as a failed attempt.
  */
 export async function attemptDelivery(
   db: Executor,
   mailer: Mailer,
   logId: number,
+  at: Date,
 ): Promise<Attempt> {
   const [row] = await db
     .update(emailLog)
-    .set({ attempts: sql`${emailLog.attempts} + 1` })
-    .where(and(eq(emailLog.id, logId), eq(emailLog.status, 'queued')))
+    .set({ attempts: sql`${emailLog.attempts} + 1`, claimedAt: at })
+    .where(and(eq(emailLog.id, logId), eq(emailLog.status, 'queued'), isNull(emailLog.claimedAt)))
     .returning();
   if (!row) return { outcome: 'skipped' };
   if (row.recipient === null || row.subject === null || row.textBody === null) {
@@ -113,28 +138,91 @@ export async function attemptDelivery(
   return { outcome: 'delivered', attempts: row.attempts };
 }
 
-/** Delivered: `sent` + `sent_at`, body dropped, `settings.smtp_last_ok_at` updated. */
-export async function markSent(db: Executor, logId: number, at: Date): Promise<void> {
-  await db
-    .update(emailLog)
-    .set({
-      status: 'sent',
-      sentAt: at,
-      lastError: null,
-      subject: null,
-      textBody: null,
-      htmlBody: null,
-    })
-    .where(eq(emailLog.id, logId));
-  await setSetting(db, SMTP_LAST_OK_KEY, at.toISOString());
+const SENT_FIELDS = (at: Date) =>
+  ({
+    status: 'sent',
+    sentAt: at,
+    lastError: null,
+    claimedAt: null,
+    subject: null,
+    textBody: null,
+    htmlBody: null,
+  }) as const;
+
+/**
+ * Journals a delivered letter: in one transaction the row becomes `sent` (body dropped, claim
+ * released) and `settings.smtp_last_ok_at` is updated; retried with short pauses. If that keeps
+ * failing, a bare `sent` mark without the settings write is tried. Returns false only when no
+ * write succeeded: the row stays claimed, and the sweep later closes it without resending.
+ */
+export async function markSent(
+  db: Executor,
+  logId: number,
+  at: Date,
+  log?: MailLog,
+): Promise<boolean> {
+  try {
+    await withRetries(() =>
+      db.transaction(async (tx) => {
+        await tx.update(emailLog).set(SENT_FIELDS(at)).where(eq(emailLog.id, logId));
+        await setSetting(tx, SMTP_LAST_OK_KEY, at.toISOString());
+      }),
+    );
+    return true;
+  } catch (err) {
+    log?.error({ err, emailLogId: logId }, 'email sent; journal transaction failed');
+  }
+  try {
+    await db.update(emailLog).set(SENT_FIELDS(at)).where(eq(emailLog.id, logId));
+    return true;
+  } catch (err) {
+    log?.error({ err, emailLogId: logId }, 'email sent but its status could not be recorded');
+    return false;
+  }
+}
+
+/**
+ * Failed attempt that will be retried: records the error and when the retry is due, and
+ * releases the claim (so the sweep can re-queue the row if the retry job never materialises).
+ */
+export async function releaseForRetry(
+  db: Executor,
+  logId: number,
+  error: string,
+  nextAttemptAt: Date,
+): Promise<void> {
+  await withRetries(() =>
+    db
+      .update(emailLog)
+      .set({ lastError: error, nextAttemptAt, claimedAt: null })
+      .where(eq(emailLog.id, logId)),
+  );
+}
+
+/** Gives up on a letter: `failed`, body dropped, claim released. */
+export async function markFailed(db: Executor, logId: number, error: string): Promise<void> {
+  await withRetries(() =>
+    db
+      .update(emailLog)
+      .set({
+        status: 'failed',
+        lastError: error,
+        claimedAt: null,
+        subject: null,
+        textBody: null,
+        htmlBody: null,
+      })
+      .where(eq(emailLog.id, logId)),
+  );
 }
 
 /**
  * Records the letter in `email_log` (`queued`, with its address and body) and delivers it.
  * With a queue: sends one `email` job (`{ logId }`, built-in retry off); the job handler
- * (`jobs/email.ts`) sends and runs the retry ladder. Without one (tests, R-M2-1): one inline
- * attempt; failure leaves the row `queued` with `attempts` and `last_error`.
- * Delivery problems are only logged — the caller's request still succeeds. Returns the row id.
+ * (`jobs/email.ts`) sends and runs the retry ladder, and the sweep re-queues the row if this
+ * `send` fails. Without one (tests, R-M2-1): one inline attempt; failure leaves the row `queued`
+ * with `attempts` and `last_error`. Delivery problems are only logged — the caller's request
+ * still succeeds. Returns the row id.
  */
 export async function enqueueEmail(
   queue: EmailQueue | null,
@@ -142,12 +230,14 @@ export async function enqueueEmail(
   email: OutgoingEmail,
   ctx: EnqueueContext,
 ): Promise<number> {
+  const createdAt = new Date(ctx.now());
   const [row] = await db
     .insert(emailLog)
     .values({
       userId: email.userId,
       kind: email.kind,
-      createdAt: new Date(ctx.now()),
+      createdAt,
+      nextAttemptAt: createdAt,
       recipient: email.to,
       subject: email.subject,
       textBody: email.text,
@@ -161,22 +251,21 @@ export async function enqueueEmail(
     try {
       await queue.send(EMAIL_QUEUE, { logId: id }, { retryLimit: 0 });
     } catch (err) {
-      ctx.log?.error({ err, ...logCtx }, 'email job could not be queued');
+      ctx.log?.error({ err, ...logCtx }, 'email job could not be queued; the sweep will retry');
     }
     return id;
   }
 
-  const attempt = await attemptDelivery(db, ctx.mailer, id);
+  const attempt = await attemptDelivery(db, ctx.mailer, id, new Date(ctx.now()));
   if (attempt.outcome === 'error') {
     ctx.log?.warn({ err: attempt.error, ...logCtx }, 'email delivery failed');
-    await db.update(emailLog).set({ lastError: attempt.error }).where(eq(emailLog.id, id));
-  } else if (attempt.outcome === 'delivered') {
     try {
-      await markSent(db, id, new Date(ctx.now()));
+      await releaseForRetry(db, id, attempt.error, new Date(ctx.now()));
     } catch (err) {
-      // The letter went out; it stays `queued` rather than being reported as failed.
-      ctx.log?.error({ err, ...logCtx }, 'email sent but its status was not recorded');
+      ctx.log?.error({ err, ...logCtx }, 'email delivery failure could not be recorded');
     }
+  } else if (attempt.outcome === 'delivered') {
+    await markSent(db, id, new Date(ctx.now()), ctx.log);
   }
   return id;
 }

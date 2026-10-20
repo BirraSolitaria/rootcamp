@@ -108,6 +108,10 @@ export const emailLog = pgTable(
     subject: text('subject'),
     textBody: text('text_body'),
     htmlBody: text('html_body'),
+    /** Set while a worker holds the row (claim → outcome written); an in-flight guard. */
+    claimedAt: tstz('claimed_at'),
+    /** When the next delivery attempt is due (insert time, then each retry's time). */
+    nextAttemptAt: tstz('next_attempt_at'),
   },
   (t) => [index('email_log_user_id_idx').on(t.userId)],
 );
