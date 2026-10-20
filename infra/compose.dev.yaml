@@ -18,6 +18,7 @@ services:
       DATABASE_URL: postgres://rootcamp:rootcamp@postgres:5432/rootcamp
       # Open the site as http://127.0.0.1:8080 (R-M2-4): CSRF compares Origin with this verbatim.
       PUBLIC_ORIGIN: http://127.0.0.1:8080
+      NODE_ENV: development
       COOKIE_SECURE: 'false'
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'

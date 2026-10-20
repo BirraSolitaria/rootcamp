@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { sessions, users, type Db } from '@rootcamp/db';
 import { eq } from 'drizzle-orm';
+import type { Executor } from './executor.js';
 
 /** Session lifetime; the cookie Max-Age matches it. */
 export const SESSION_TTL_MS = 30 * 24 * 3600_000;
@@ -24,7 +25,7 @@ export function hashToken(token: string): string {
 
 /** Creates a session valid for 30 days and returns its token (32 random bytes, base64url). */
 export async function createSession(
-  db: Db,
+  db: Executor,
   userId: string,
   ip: string | null,
   ua: string | null,

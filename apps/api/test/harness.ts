@@ -20,7 +20,8 @@ import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainer
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp, type AppDeps } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
-import type { Limits, Mailer } from '../src/types.js';
+import { createSmtpMailer } from '../src/services/mailer.js';
+import type { Limits } from '../src/types.js';
 
 /** Same images as infra/versions.env. */
 export const POSTGRES_IMAGE = 'postgres:16';
@@ -108,27 +109,7 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-/** Mailer that hands messages to Mailpit through its HTTP send API (Task 4 may switch to SMTP). */
-function mailpitMailer(mailpitUrl: string): Mailer {
-  return {
-    async send(msg) {
-      const res = await fetch(`${mailpitUrl}/api/v1/send`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          From: { Email: 'noreply@rootcamp.test' },
-          To: [{ Email: msg.to }],
-          Subject: msg.subject,
-          Text: msg.text,
-          HTML: msg.html,
-        }),
-      });
-      if (!res.ok) throw new Error(`Mailpit send: ${res.status}`);
-    },
-  };
-}
-
-/** Maps harness deps onto `AppDeps`: test config, harness clock, Mailpit mailer, no pg-boss. */
+/** Maps harness deps onto `AppDeps`: test config, harness clock, SMTP mailer into Mailpit, no pg-boss. */
 export function harnessAppDeps(d: HarnessDeps): AppDeps {
   const config = loadConfig({
     DATABASE_URL: d.databaseUrl,
@@ -145,7 +126,7 @@ export function harnessAppDeps(d: HarnessDeps): AppDeps {
     config,
     db: d.db,
     now: d.now,
-    mailer: mailpitMailer(d.mailpitUrl),
+    mailer: createSmtpMailer(config),
     boss: null,
     limits: d.limits,
   };
@@ -283,6 +264,8 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
       new PostgreSqlContainer(POSTGRES_IMAGE).start(),
       new GenericContainer(MAILPIT_IMAGE)
         .withExposedPorts(1025, 8025)
+        // Without this Mailpit reverse-resolves every SMTP client and greets ~1 s late.
+        .withEnvironment({ MP_SMTP_DISABLE_RDNS: 'true' })
         // A log wait: testcontainers probes HTTP via `localhost`, which hangs on this host (::1).
         .withWaitStrategy(Wait.forLogMessage(/\[http\] accessible via/))
         .start(),

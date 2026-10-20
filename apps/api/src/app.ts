@@ -6,6 +6,7 @@ import csrf from './plugins/csrf.js';
 import errors from './plugins/errors.js';
 import session from './plugins/session.js';
 import verifiedGuard from './plugins/verifiedGuard.js';
+import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import type { ContentStore, Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
 
@@ -49,6 +50,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(verifiedGuard);
 
   await app.register(healthRoutes, { db: deps.db });
+  await app.register(authRoutes, deps);
 
   return app;
 }

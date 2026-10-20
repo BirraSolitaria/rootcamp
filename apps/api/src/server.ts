@@ -4,7 +4,7 @@ import { MAX_HEARTS } from '@rootcamp/logic';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
-import type { Mailer } from './types.js';
+import { createSmtpMailer } from './services/mailer.js';
 
 /** Shipped next to dist/ (package.json `files`), so this resolves both from src/ and dist/. */
 const MIGRATIONS_DIR = fileURLToPath(new URL('../drizzle', import.meta.url));
@@ -20,12 +20,7 @@ try {
 // Pool ≥ 2: runMigrations holds the advisory lock on one connection while migrating on another.
 const handle = createDb(config.DATABASE_URL, { max: 10 });
 
-// Placeholder until Task 4 adds the SMTP mailer (services/mailer.ts, R-M2-1).
-const mailer: Mailer = {
-  async send() {
-    throw new Error('mailer is not configured yet');
-  },
-};
+const mailer = createSmtpMailer(config);
 
 let app: FastifyInstance | undefined;
 let shuttingDown = false;
