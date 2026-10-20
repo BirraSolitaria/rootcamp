@@ -14,3 +14,5 @@ export * from './courseQuery.js';
 export * from './unlock.js';
 export * from './lessonSession.js';
 export * from './reviewSession.js';
+export * from './rank.js';
+export * from './practiceReward.js';
