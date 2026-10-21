@@ -1,0 +1,33 @@
+{
+  "name": "content-build",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds content/ into hashed content-dist/{public,server}/<hash>/ bundles.",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "rootcamp-src": "./src/build.ts",
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    }
+  },
+  "scripts": {
+    "start": "tsx --conditions=rootcamp-src src/cli.ts",
+    "build": "tsc -b tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rootcamp/content-schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
