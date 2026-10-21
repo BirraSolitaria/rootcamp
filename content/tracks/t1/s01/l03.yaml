@@ -127,9 +127,9 @@ tasks:
         - '~'
         - '--all'
     distractors:
-      - '-all'
+      - '--show-all'
       - '--a'
-    explanation: 'Длинный флаг пишут с двумя дефисами: --all. А -all ls разберёт как короткие флаги -a, -l, -l — это уже подробный список. На --a ls ответит, что флаг неоднозначен: подходят --all, --almost-all и --author.'
+    explanation: 'Длинная форма флага -a — --all, с двумя дефисами. Флага --show-all у ls нет, она ответит unrecognized option. На --a ls скажет, что флаг неоднозначен: подходят --all, --almost-all и --author.'
   - id: t1.s01.l03.t13
     type: match_pairs
     prompt: 'Сопоставь короткий флаг ls и его длинную форму'
