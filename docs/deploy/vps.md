@@ -19,6 +19,8 @@ VPS: 4 vCPU, 7,8 ГБ RAM, KVM, Ubuntu 24.04.5 LTS (штатное ядро `6.8
 >   cd ~/rootcamp && git pull --ff-only && docker compose -p rootcamp --env-file infra/versions.env --env-file infra/vps.env -f infra/compose.yaml -f infra/compose.vps-test.yaml up -d --build
 >   ```
 >
+>   Затем активируйте версию курса из нового образа (§8, «Контент курса»): `… exec api node dist/cli.js content:list` и `… content:activate <hash>`.
+>
 > - Автообновления безопасности ставит unattended-upgrades, но сервер сам не перезагружается. Если появился файл `/var/run/reboot-required` (в нём и в `/var/run/reboot-required.pkgs` — причина, обычно новое ядро), выполните `sudo reboot`. Стенд поднимется сам: Docker включён в автозапуск, у всех сервисов (`postgres`, `api`, `caddy`, `mailpit`) стоит `restart: unless-stopped` (проверено перезагрузкой).
 >
 > **Проверка:** `curl -s http://87.251.86.80:8080/api/health` с ПК печатает `{"db":true,"smtpLastOkAt":…}` (`null` только до первого отправленного письма, дальше — время последней отправки); `ssh deploy@87.251.86.80 uname -r` показывает `6.8.0-147-generic` или новее.
@@ -265,6 +267,25 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST -H "X-RC: 1" -H "Origin: http://<
 
 **Проверка:** первая команда печатает `{"db":true,...}`, вторая ответ с `csrf` (403), третья код **не** `403` (обычно `204`). Значит, `PUBLIC_ORIGIN` совпадает с адресом.
 
+### Контент курса
+
+Курс собирается при сборке образов (`rc up -d --build`), Node на сервере не нужен: образ `api` содержит серверную часть `content-dist/server/<hash>/` (полные манифесты и скрипты практик), образ `caddy` — только публичную `content-dist/public/<hash>/`, которую Caddy отдаёт по `/content/<hash>/…` с `Cache-Control: public, max-age=31536000, immutable`. `<hash>` — версия курса (12 hex-символов), она одинакова в обоих образах. Новая версия начинает отдаваться пользователям только после активации; api перечитывает её сразу, без перезапуска (`NOTIFY rc_content`).
+
+После каждой пересборки, если менялся `content/`:
+
+```bash
+rc exec api node dist/cli.js content:list              # версии в образе; активная помечена (active)
+rc exec api node dist/cli.js content:activate <hash>   # hash — строка из content:list без пометки
+```
+
+Узнать hash можно и из лога сборки: шаг `pnpm content:build` печатает `version <hash>`. Неинтерактивно, одной командой (в образе ровно одна версия):
+
+```bash
+rc exec -T api sh -c 'node dist/cli.js content:activate "$(ls content-dist/server)"'
+```
+
+**Проверка:** `content:activate` печатает `activated <hash>`, `content:list` — `<hash> (active)`. Публичные файлы: `curl -sI http://127.0.0.1:8080/content/<hash>/catalog.json` — `200` и `Cache-Control: public, max-age=31536000, immutable`; `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/content/<hash>/../server/` — не `200` с данными (серверной части в образе Caddy нет). Пока версия не активирована (или активная версия отсутствует в образе — тогда `content:list` пишет `NOT INSTALLED`), `GET /api/content/version` и `GET /api/progress` отвечают `503`, остальное API работает. Для несуществующего hash `content:activate` печатает `version … is not installed` и выходит с кодом 1, активная версия не меняется.
+
 ### Первый пользователь и админ
 
 1. Откройте в браузере `http://<IP>:8080` (ровно этот адрес, как в `PUBLIC_ORIGIN`) и зарегистрируйтесь.
@@ -325,10 +346,11 @@ rc restart api                 # перезапуск одного сервис�
 
 ```bash
 cd ~/rootcamp && git pull --ff-only && rc up -d --build && docker image prune -f
+rc exec -T api sh -c 'node dist/cli.js content:activate "$(ls content-dist/server)"'
 curl -s http://127.0.0.1:8080/api/health; echo
 ```
 
-**Проверка:** `git log --oneline -1` показывает новый коммит, health печатает `{"db":true,...}`. После изменения только `vps.env` пересборка не нужна, хватит `rc up -d`: изменённые контейнеры пересоздадутся.
+**Проверка:** `git log --oneline -1` показывает новый коммит, активация печатает `activated <hash>` (повторная активация той же версии безвредна), health печатает `{"db":true,...}`. После изменения только `vps.env` пересборка не нужна, хватит `rc up -d`: изменённые контейнеры пересоздадутся.
 
 **Перезагрузка сервера** (например, ради нового ядра — когда есть `/var/run/reboot-required`, §1): `sudo reboot`. Docker включён в автозапуск, у всех сервисов `restart: unless-stopped`, так что стенд поднимается сам. Исключение: сервисы, остановленные вручную через `rc stop`, после перезагрузки остаются остановленными.
 

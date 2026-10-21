@@ -3,7 +3,8 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    # feat/** too: api integration and e2e need Docker, which only CI (and the VPS) have.
+    branches: [main, 'feat/**']
 
 concurrency:
   group: ci-${{ github.ref }}

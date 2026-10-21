@@ -10,6 +10,19 @@
 		reverse_proxy api:3000
 	}
 
+	# Course content baked into the web image (apps/web/Dockerfile): /content/<hash>/... is
+	# /content-dist/public/<hash>/.... A version's files never change, so found files are cached
+	# for a year; misses and directories are not. The server part is not in this image at all.
+	handle_path /content/* {
+		root * /content-dist/public
+		@immutable {
+			file
+			not path */
+		}
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
 	handle {
 		root * /srv
 		try_files {path} /index.html

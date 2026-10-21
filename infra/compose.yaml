@@ -2,6 +2,11 @@
 # Dev: `docker compose up --build` from the repo root (root compose.yaml includes this
 # file + compose.dev.yaml with versions.env), or `pnpm dev:up`.
 # Production-only services (apt-mirror, registry, dnsmasq, backup, sandboxd) arrive in M4b/M6.
+# Course content (R-M3-3) is built inside the images, no volume or host Node needed: the api
+# image carries content-dist/server/<hash>/ (CONTENT_DIR=/app/content-dist), the web (caddy)
+# image only content-dist/public/<hash>/, served as /content/<hash>/. After an image update
+# activate the new version:  docker compose … exec api node dist/cli.js content:list
+#                            docker compose … exec api node dist/cli.js content:activate <hash>
 name: rootcamp
 
 x-logging: &logging
