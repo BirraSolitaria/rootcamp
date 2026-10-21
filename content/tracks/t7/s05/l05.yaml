@@ -1,0 +1,248 @@
+id: t7.s05.l05
+title: 'Связь контейнеров между собой'
+theory:
+  title: 'Приложение и база вместе'
+  blocks:
+    - type: text
+      text: 'Типичная схема: общая пользовательская сеть, база с понятным именем, приложение получает имя базы через переменную окружения. Наружу публикуется только порт веб-сервиса.'
+    - type: code
+      code: |-
+        docker network create appnet
+        docker run -d --name db --network appnet \
+          -e POSTGRES_PASSWORD=secret postgres:16
+        docker run -d --network appnet -e DB_HOST=db myapi
+        docker run -d --name web --network appnet -p 8080:80 nginx
+    - type: text
+      text: 'Используй имена, а не IP: при пересоздании контейнер может получить другой IP, а DNS всегда вернёт актуальный. Старый флаг --link устарел, вместо него — пользовательские сети.'
+    - type: text
+      text: 'localhost внутри контейнера — это сам контейнер, а не хост и не соседний контейнер.'
+    - type: text
+      text: 'Чтобы обратиться к сервису на самом хосте, есть имя host.docker.internal. В Docker Desktop оно работает сразу, а на Linux его добавляют флагом --add-host=host.docker.internal:host-gateway.'
+tasks:
+  - id: t7.s05.l05.t01
+    type: single_choice
+    question: 'Почему в настройках приложения пишут имя контейнера базы, а не её IP?'
+    options:
+      - 'IP контейнеров секретны'
+      - 'При пересоздании IP может измениться, а DNS всегда вернёт актуальный'
+      - 'По IP контейнеры недоступны'
+      - 'Имя быстрее IP'
+    correctIndex: 1
+    explanation: 'Docker выдаёт IP при подключении к сети, и после пересоздания он может стать другим. Имя контейнера остаётся прежним.'
+  - id: t7.s05.l05.t02
+    type: true_false
+    statement: 'В схеме «приложение + база» порт базы обязательно публиковать на хост, иначе приложение до неё не достучится.'
+    answer: false
+    explanation: 'Если оба контейнера в одной сети, приложение обращается к db:5432 напрямую. Публикация порта базы лишь открыла бы её снаружи.'
+  - id: t7.s05.l05.t03
+    type: assemble
+    prompt: 'Собери команду: запустить nginx с именем web в сети appnet и открыть его на порту 8080'
+    answer:
+      - docker
+      - run
+      - '--name'
+      - web
+      - '--network'
+      - appnet
+      - '-p'
+      - '8080:80'
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '--name'
+        - web
+        - '-p'
+        - '8080:80'
+        - '--network'
+        - appnet
+        - nginx
+      - - docker
+        - run
+        - '--network'
+        - appnet
+        - '--name'
+        - web
+        - '-p'
+        - '8080:80'
+        - nginx
+      - - docker
+        - run
+        - '--network'
+        - appnet
+        - '-p'
+        - '8080:80'
+        - '--name'
+        - web
+        - nginx
+      - - docker
+        - run
+        - '-p'
+        - '8080:80'
+        - '--name'
+        - web
+        - '--network'
+        - appnet
+        - nginx
+      - - docker
+        - run
+        - '-p'
+        - '8080:80'
+        - '--network'
+        - appnet
+        - '--name'
+        - web
+        - nginx
+    distractors:
+      - '--link'
+      - host
+    explanation: 'Веб-сервис — единственный, кого публикуют наружу. В сети appnet он при этом видит остальные контейнеры по именам.'
+  - id: t7.s05.l05.t04
+    type: fill_blank
+    prompt: 'Впиши специальное значение, чтобы на Linux имя вело на хост'
+    template: 'docker run --add-host=host.docker.internal:___ myapp'
+    acceptedAnswers:
+      - 'host-gateway'
+    explanation: 'host-gateway Docker заменяет на адрес хоста в сети контейнера. После этого host.docker.internal работает так же, как в Docker Desktop.'
+  - id: t7.s05.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь шаг и его цель в схеме «веб + база»'
+    pairs:
+      - left: 'docker network create appnet'
+        right: 'Общая сеть с DNS по именам'
+      - left: '--name db'
+        right: 'Понятное имя для базы'
+      - left: '-e DB_HOST=db'
+        right: 'Сообщить приложению адрес базы'
+      - left: '-p 8080:80 у web'
+        right: 'Открыть наружу только веб'
+    explanation: 'Каждый шаг решает одну задачу: сеть даёт связь, имя — адрес, переменная — настройку, а публикация открывает ровно один нужный порт.'
+  - id: t7.s05.l05.t06
+    type: single_choice
+    question: 'Как на Linux дать контейнеру имя host.docker.internal, ведущее на хост?'
+    options:
+      - 'Ничего не нужно, оно есть всегда'
+      - 'Запустить с --network none'
+      - 'Добавить --add-host=host.docker.internal:host-gateway'
+      - 'Опубликовать порт через -p'
+    correctIndex: 2
+    explanation: 'В Docker Desktop это имя добавлено заранее, а в Docker Engine на Linux его нужно добавить вручную флагом --add-host.'
+  - id: t7.s05.l05.t07
+    type: true_false
+    statement: 'Флаг --link устарел, и для связи контейнеров вместо него используют пользовательские сети.'
+    answer: true
+    explanation: '--link связывал контейнеры вручную и нужен был в основном в сети bridge по умолчанию. Пользовательская сеть делает то же автоматически через DNS.'
+  - id: t7.s05.l05.t08
+    type: assemble
+    prompt: 'Собери команду: запустить myapi в фоне в сети appnet и передать ему DB_HOST=db'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--network'
+      - appnet
+      - '-e'
+      - 'DB_HOST=db'
+      - myapi
+    altAnswers:
+      - - docker
+        - run
+        - '-d'
+        - '-e'
+        - 'DB_HOST=db'
+        - '--network'
+        - appnet
+        - myapi
+      - - docker
+        - run
+        - '--network'
+        - appnet
+        - '-d'
+        - '-e'
+        - 'DB_HOST=db'
+        - myapi
+      - - docker
+        - run
+        - '--network'
+        - appnet
+        - '-e'
+        - 'DB_HOST=db'
+        - '-d'
+        - myapi
+      - - docker
+        - run
+        - '-e'
+        - 'DB_HOST=db'
+        - '-d'
+        - '--network'
+        - appnet
+        - myapi
+      - - docker
+        - run
+        - '-e'
+        - 'DB_HOST=db'
+        - '--network'
+        - appnet
+        - '-d'
+        - myapi
+    distractors:
+      - '--link'
+      - 'DB_HOST=localhost'
+    explanation: 'Сеть appnet даёт доступ к db по имени, а переменная сообщает приложению это имя. localhost указал бы на сам контейнер api.'
+  - id: t7.s05.l05.t09
+    type: single_choice
+    question: 'Приложение в контейнере api подключается к localhost:5432, а база — в контейнере db. Что не так?'
+    options:
+      - 'localhost внутри контейнера — это сам api; нужен адрес db:5432'
+      - 'Нужно опубликовать порт 5432 базы'
+      - 'Нужно запустить api с --network none'
+      - 'Всё верно, это сработает'
+    correctIndex: 0
+    explanation: 'У каждого контейнера свой loopback. В api на порту 5432 никто не слушает, а база доступна по имени db.'
+  - id: t7.s05.l05.t10
+    type: fill_blank
+    prompt: 'Впиши адрес базы для приложения: база — контейнер db в той же сети'
+    template: 'docker run -d --network appnet -e DB_HOST=___ myapi'
+    acceptedAnswers:
+      - db
+    explanation: 'Имя контейнера — это и есть его адрес в пользовательской сети. DNS Docker превратит db в текущий IP базы.'
+  - id: t7.s05.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь адрес внутри контейнера api и куда он ведёт'
+    pairs:
+      - left: localhost
+        right: 'Сам контейнер api'
+      - left: db
+        right: 'Контейнер db в той же сети'
+      - left: host.docker.internal
+        right: 'Хост, на котором работает Docker'
+    explanation: 'Один и тот же адрес по-разному понимается внутри и снаружи контейнера. Для соседей используй имена, для хоста — host.docker.internal.'
+  - id: t7.s05.l05.t12
+    type: assemble
+    prompt: 'Собери команду: из временного alpine в сети appnet проверить, что db отвечает по имени'
+    answer:
+      - docker
+      - run
+      - '--rm'
+      - '--network'
+      - appnet
+      - alpine
+      - ping
+      - '-c'
+      - '1'
+      - db
+    altAnswers:
+      - - docker
+        - run
+        - '--network'
+        - appnet
+        - '--rm'
+        - alpine
+        - ping
+        - '-c'
+        - '1'
+        - db
+    distractors:
+      - exec
+      - bridge
+    explanation: 'Временный контейнер должен быть в той же сети, иначе имя db не разрешится. -c 1 отправит один пакет, а --rm уберёт контейнер после проверки.'

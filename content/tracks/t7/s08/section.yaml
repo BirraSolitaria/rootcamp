@@ -1,0 +1,9 @@
+id: t7.s08
+title: 'Docker Compose'
+description: 'Как описать несколько сервисов в compose.yaml и управлять ими командой docker compose.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

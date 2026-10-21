@@ -1,0 +1,145 @@
+id: t7.s08.l04
+title: 'depends_on и healthcheck'
+theory:
+  title: 'Порядок запуска и готовность'
+  blocks:
+    - type: code
+      code: |-
+        services:
+          api:
+            build: .
+            depends_on:
+              db:
+                condition: service_healthy
+          db:
+            image: postgres:16
+            healthcheck:
+              test: ["CMD-SHELL", "pg_isready -U postgres"]
+              interval: 5s
+              timeout: 3s
+              retries: 5
+              start_period: 10s
+    - type: text
+      text: 'depends_on: [db] (короткая форма) задаёт только порядок: Compose запустит db раньше api, но не ждёт, пока база готова принимать подключения. При down порядок обратный.'
+    - type: text
+      text: 'healthcheck — команда, которую Docker периодически выполняет внутри контейнера. Код 0 — проверка прошла, иначе — неудача. После retries неудач подряд статус unhealthy, после успеха — healthy, до первого успеха — starting. Неудачи во время start_period не засчитываются. Статус виден в docker compose ps.'
+    - type: text
+      text: 'condition: service_healthy ждёт статуса healthy. Ещё есть service_started (как в короткой форме) и service_completed_successfully — сервис завершился с кодом 0, например миграции базы.'
+    - type: text
+      text: 'test: CMD запускает программу напрямую, CMD-SHELL — через оболочку sh. В Dockerfile ту же проверку задаёт инструкция HEALTHCHECK.'
+tasks:
+  - id: t7.s08.l04.t01
+    type: single_choice
+    question: 'Что гарантирует короткая форма depends_on: [db]?'
+    options:
+      - 'Что база готова принимать подключения'
+      - 'Что контейнер db запустится раньше api'
+      - 'Что api перезапустится при падении db'
+      - 'Что db и api будут в разных сетях'
+    correctIndex: 1
+    explanation: 'Короткая форма означает service_started: контейнер db запущен. Сама PostgreSQL в этот момент может ещё инициализироваться.'
+  - id: t7.s08.l04.t02
+    type: true_false
+    statement: 'Код выхода 1 у команды healthcheck означает успешную проверку.'
+    answer: false
+    explanation: 'Как и у любой программы, успех — это код 0. Любой другой код Docker считает неудачей и приближает статус unhealthy.'
+  - id: t7.s08.l04.t03
+    type: assemble
+    prompt: 'Собери строку compose.yaml: ждать, пока зависимость станет здоровой'
+    answer:
+      - 'condition:'
+      - service_healthy
+    distractors:
+      - service_started
+      - 'wait:'
+    explanation: 'service_healthy ждёт, пока healthcheck зависимости вернёт успех. service_started ждал бы только запуска контейнера.'
+  - id: t7.s08.l04.t04
+    type: fill_blank
+    prompt: 'Впиши вариант test, который запускает команду через оболочку'
+    template: 'test: ["___", "pg_isready -U postgres"]'
+    acceptedAnswers:
+      - 'CMD-SHELL'
+    explanation: 'CMD-SHELL передаёт строку в sh -c, поэтому работают пробелы, && и переменные. CMD запустил бы программу без оболочки.'
+  - id: t7.s08.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь условие depends_on и чего оно ждёт'
+    pairs:
+      - left: service_started
+        right: 'Контейнер запущен'
+      - left: service_healthy
+        right: 'Healthcheck прошёл'
+      - left: service_completed_successfully
+        right: 'Сервис завершился с кодом 0'
+    explanation: 'Выбор условия зависит от зависимости: базу ждут до healthy, а разовую задачу вроде миграций — до успешного завершения.'
+  - id: t7.s08.l04.t06
+    type: single_choice
+    question: 'Какой статус у контейнера, если проверка провалилась retries раз подряд?'
+    options:
+      - starting
+      - healthy
+      - unhealthy
+      - exited
+    correctIndex: 2
+    explanation: 'retries — допустимое число неудач подряд. Когда оно исчерпано, Docker помечает контейнер unhealthy, но не останавливает его.'
+  - id: t7.s08.l04.t07
+    type: true_false
+    statement: 'Неудачные проверки во время start_period не засчитываются в retries.'
+    answer: true
+    explanation: 'start_period даёт медленному приложению время на запуск. Успех в этот период сразу делает контейнер healthy.'
+  - id: t7.s08.l04.t08
+    type: assemble
+    prompt: 'Собери команду: показать статус только сервиса db'
+    answer:
+      - docker
+      - compose
+      - ps
+      - db
+    distractors:
+      - ls
+      - status
+    explanation: 'ps с именем сервиса показывает его контейнеры и статус, включая (healthy). docker compose ls выводит список проектов, а не контейнеров.'
+  - id: t7.s08.l04.t09
+    type: single_choice
+    question: 'Сервис migrate применяет миграции базы и завершается. Какое условие depends_on нужно сервису api?'
+    options:
+      - service_started
+      - service_healthy
+      - service_completed_successfully
+      - service_running
+    correctIndex: 2
+    explanation: 'api должен стартовать, только когда миграции закончились без ошибок. Это и проверяет service_completed_successfully. Условия service_running нет.'
+  - id: t7.s08.l04.t10
+    type: fill_blank
+    prompt: 'Впиши ключ healthcheck: сколько неудач подряд делают статус unhealthy'
+    template: '___: 5'
+    acceptedAnswers:
+      - retries
+    explanation: 'Одна неудача — ещё не авария: сеть могла моргнуть. retries задаёт, сколько неудач подряд нужно, чтобы считать сервис нездоровым.'
+  - id: t7.s08.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь ключ healthcheck и его смысл'
+    pairs:
+      - left: test
+        right: 'Команда проверки'
+      - left: interval
+        right: 'Пауза между проверками'
+      - left: timeout
+        right: 'Сколько ждать одну проверку'
+      - left: retries
+        right: 'Неудач подряд до unhealthy'
+      - left: start_period
+        right: 'Время на запуск без штрафа'
+    explanation: 'Вместе эти ключи решают, как часто и насколько строго Docker проверяет сервис.'
+  - id: t7.s08.l04.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: проверять здоровье командой curl -f http://localhost/'
+    answer:
+      - 'HEALTHCHECK'
+      - 'CMD'
+      - curl
+      - '-f'
+      - 'http://localhost/'
+    distractors:
+      - 'RUN'
+      - '--test'
+    explanation: 'HEALTHCHECK CMD задаёт проверку прямо в образе. curl -f возвращает ненулевой код при HTTP-ошибке, и Docker засчитает неудачу.'

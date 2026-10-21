@@ -1,0 +1,141 @@
+id: t7.s06.l04
+title: 'ENV, ARG, EXPOSE'
+theory:
+  title: 'Переменные и порты в Dockerfile'
+  blocks:
+    - type: text
+      text: 'ENV ИМЯ=значение задаёт переменную окружения в образе. Она доступна следующим инструкциям при сборке и процессам в контейнере, а при запуске её можно переопределить через -e.'
+    - type: text
+      text: 'ARG ИМЯ=по_умолчанию объявляет аргумент сборки. Он есть только во время сборки, в работающем контейнере его нет. Значение передают так: docker build --build-arg ИМЯ=значение.'
+    - type: code
+      code: |-
+        ARG VERSION=3.12
+        FROM python:${VERSION}-slim
+        ARG BUILD_ID
+        ENV APP_MODE=prod
+        EXPOSE 8000
+        # docker build --build-arg VERSION=3.13 .
+    - type: text
+      text: 'ARG, объявленный до FROM, доступен только в строке FROM. Чтобы использовать его ниже, объяви ARG ещё раз после FROM.'
+    - type: text
+      text: 'Секреты нельзя передавать через ARG или ENV: значения остаются в метаданных образа и видны в docker history и docker image inspect.'
+    - type: text
+      text: 'EXPOSE 8000 (или 53/udp) документирует, какой порт слушает приложение. Порт он не публикует: для этого нужен -p или -P при запуске.'
+tasks:
+  - id: t7.s06.l04.t01
+    type: single_choice
+    question: 'Чем ARG отличается от ENV?'
+    options:
+      - 'Ничем, это синонимы'
+      - 'ENV доступен только при сборке'
+      - 'ARG доступен только при сборке, а ENV — и при сборке, и в контейнере'
+      - 'ARG задаёт порт'
+    correctIndex: 2
+    explanation: 'ARG — параметр сборки, он не попадает в окружение контейнера. ENV записывается в образ и видна запущенным процессам.'
+  - id: t7.s06.l04.t02
+    type: true_false
+    statement: 'Переменная, объявленная через ARG, видна в работающем контейнере.'
+    answer: false
+    explanation: 'ARG существует только во время сборки. Чтобы значение попало в контейнер, его нужно присвоить через ENV.'
+  - id: t7.s06.l04.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: переменная NODE_ENV=production, видная и в работающем контейнере'
+    answer:
+      - 'ENV'
+      - 'NODE_ENV=production'
+    distractors:
+      - 'ARG'
+      - '-e'
+    explanation: 'ENV записывает переменную в образ, и её получит каждый контейнер. ARG исчез бы после сборки.'
+  - id: t7.s06.l04.t04
+    type: fill_blank
+    prompt: 'Впиши флаг docker build, передающий значение ARG'
+    template: 'docker build --___ VERSION=3.13 .'
+    acceptedAnswers:
+      - 'build-arg'
+    explanation: '--build-arg подставляет значение вместо значения по умолчанию из ARG. Флаг можно повторять для нескольких аргументов.'
+  - id: t7.s06.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь элемент и его назначение'
+    pairs:
+      - left: 'ENV'
+        right: 'Переменная в образе и контейнере'
+      - left: 'ARG'
+        right: 'Переменная только для сборки'
+      - left: 'EXPOSE'
+        right: 'Документирует порт приложения'
+      - left: '--build-arg'
+        right: 'Передаёт значение ARG при сборке'
+    explanation: 'ENV и ARG различаются временем жизни, а EXPOSE только описывает порт. --build-arg — способ задать ARG снаружи.'
+  - id: t7.s06.l04.t06
+    type: single_choice
+    question: 'Почему пароль нельзя передавать в образ через ARG или ENV?'
+    options:
+      - 'Значения остаются в метаданных образа и видны в docker history и inspect'
+      - 'Docker шифрует их, и приложение не сможет прочитать'
+      - 'Переменные не поддерживают спецсимволы'
+      - 'Это замедляет сборку'
+    correctIndex: 0
+    explanation: 'Любой, кто скачает образ, увидит значения в его истории и метаданных. Для секретов есть другие механизмы, о них — в разделе о лучших практиках.'
+  - id: t7.s06.l04.t07
+    type: true_false
+    statement: 'ARG, объявленный до FROM, автоматически доступен в инструкциях после FROM.'
+    answer: false
+    explanation: 'ARG до FROM действует только в строке FROM. Чтобы использовать его дальше, нужно повторить ARG ИМЯ после FROM.'
+  - id: t7.s06.l04.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: аргумент сборки VERSION со значением по умолчанию 3.12'
+    answer:
+      - 'ARG'
+      - 'VERSION=3.12'
+    distractors:
+      - 'ENV'
+      - '--build-arg'
+    explanation: 'ARG объявляет параметр сборки и задаёт значение по умолчанию. Его можно заменить флагом --build-arg без правки Dockerfile.'
+  - id: t7.s06.l04.t09
+    type: single_choice
+    question: 'Dockerfile: ARG VERSION=3.12, затем FROM python:${VERSION}. Какой образ возьмёт docker build --build-arg VERSION=3.13 .?'
+    options:
+      - 'python:3.12'
+      - 'python:latest'
+      - 'Ошибка сборки'
+      - 'python:3.13'
+    correctIndex: 3
+    explanation: '--build-arg заменяет значение по умолчанию. ARG до FROM можно использовать в строке FROM, поэтому возьмётся python:3.13.'
+  - id: t7.s06.l04.t10
+    type: fill_blank
+    prompt: 'Впиши протокол, чтобы задокументировать DNS-порт'
+    template: 'EXPOSE 53/___'
+    acceptedAnswers:
+      - udp
+    explanation: 'По умолчанию EXPOSE означает TCP. Для DNS протокол обычно UDP, и его указывают явно.'
+  - id: t7.s06.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь, где видна переменная'
+    pairs:
+      - left: 'ENV APP_MODE=prod'
+        right: 'При сборке и в контейнере'
+      - left: 'ARG BUILD_ID'
+        right: 'Только в инструкциях сборки'
+      - left: 'docker run -e APP_MODE=dev'
+        right: 'Переопределяет ENV при запуске'
+    explanation: 'ENV попадает в образ, ARG живёт только во время сборки, а -e меняет окружение конкретного контейнера, не трогая образ.'
+  - id: t7.s06.l04.t12
+    type: assemble
+    prompt: 'Собери команду: собрать образ из текущей папки, задав аргумент VERSION=3.13'
+    answer:
+      - docker
+      - build
+      - '--build-arg'
+      - 'VERSION=3.13'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '.'
+        - '--build-arg'
+        - 'VERSION=3.13'
+    distractors:
+      - '-e'
+      - '--env'
+    explanation: 'Аргументы сборки передаются через --build-arg. -e и --env относятся к docker run и задают окружение контейнера, а не сборки.'

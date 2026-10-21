@@ -1,0 +1,148 @@
+id: t7.s10.l05
+title: 'Уборка: system prune'
+theory:
+  title: 'Освобождаем место'
+  blocks:
+    - type: code
+      code: |-
+        docker system df            # сколько места занимает Docker
+        docker container prune      # остановленные контейнеры
+        docker image prune          # висячие образы
+        docker image prune -a       # все образы без контейнеров
+        docker network prune        # неиспользуемые сети
+        docker builder prune        # кэш сборки
+        docker system prune         # всё это разом, кроме томов
+        docker system prune -a --volumes
+        docker image prune -a --filter until=24h
+    - type: text
+      text: 'Висячий (dangling) образ — образ без тега, <none>:<none>. Обычно это старая версия, у которой новая сборка забрала тег.'
+    - type: text
+      text: 'docker system prune удаляет остановленные контейнеры, неиспользуемые сети, висячие образы и кэш сборки. Тома он не трогает: --volumes добавляет неиспользуемые анонимные тома. -a удаляет все образы, которые не использует ни один контейнер.'
+    - type: text
+      text: 'Prune-команды спрашивают подтверждение, а -f (--force) пропускает вопрос — осторожно в скриптах. --filter until=24h оставляет всё, что создано меньше суток назад.'
+tasks:
+  - id: t7.s10.l05.t01
+    type: single_choice
+    question: 'Что docker system prune без флагов НЕ удалит?'
+    options:
+      - 'Остановленные контейнеры'
+      - 'Висячие образы'
+      - 'Тома'
+      - 'Кэш сборки'
+    correctIndex: 2
+    explanation: 'Тома хранят данные, поэтому system prune трогает их только с --volumes. Всё остальное из списка он удаляет.'
+  - id: t7.s10.l05.t02
+    type: true_false
+    statement: 'docker system prune без флагов может удалить данные из именованного тома.'
+    answer: false
+    explanation: 'Без --volumes system prune тома не трогает вообще, а с --volumes удаляет только неиспользуемые анонимные. Именованный том так не потерять.'
+  - id: t7.s10.l05.t03
+    type: assemble
+    prompt: 'Собери команду: удалить все неиспользуемые образы, а не только висячие'
+    answer:
+      - docker
+      - image
+      - prune
+      - '-a'
+    distractors:
+      - '--volumes'
+      - rmi
+    explanation: '-a расширяет prune с висячих образов до всех, у которых нет контейнеров. У image prune нет флага --volumes.'
+  - id: t7.s10.l05.t04
+    type: fill_blank
+    prompt: 'Впиши подкоманду, которая покажет, сколько места занимают образы, контейнеры, тома и кэш'
+    template: 'docker system ___'
+    acceptedAnswers:
+      - df
+    explanation: 'df — как одноимённая утилита Linux: показывает занятое место и сколько можно освободить. С неё начинают уборку.'
+  - id: t7.s10.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду и что она удаляет'
+    pairs:
+      - left: 'docker container prune'
+        right: 'Остановленные контейнеры'
+      - left: 'docker image prune'
+        right: 'Висячие образы'
+      - left: 'docker builder prune'
+        right: 'Кэш сборки'
+      - left: 'docker volume prune'
+        right: 'Неиспользуемые анонимные тома'
+      - left: 'docker network prune'
+        right: 'Неиспользуемые сети'
+    explanation: 'У каждого типа объектов своя команда prune, а docker system prune объединяет их, кроме томов.'
+  - id: t7.s10.l05.t06
+    type: single_choice
+    question: 'Какие образы удалит docker image prune без флагов?'
+    options:
+      - 'Висячие: без тега, <none>:<none>'
+      - 'Все, у которых нет контейнеров'
+      - 'Все образы из чужих реестров'
+      - 'Все образы с тегом latest'
+    correctIndex: 0
+    explanation: 'Без -a prune трогает только висячие образы: старые версии, у которых новая сборка забрала тег. Образы с тегами остаются.'
+  - id: t7.s10.l05.t07
+    type: true_false
+    statement: 'Флаг -f у prune-команд пропускает вопрос о подтверждении.'
+    answer: true
+    explanation: '-f (--force) нужен в скриптах, где некому ответить y. Вручную лучше прочитать вопрос: удалённое не вернуть.'
+  - id: t7.s10.l05.t08
+    type: assemble
+    prompt: 'Собери команду: удалить всё неиспользуемое, включая лишние образы и анонимные тома'
+    answer:
+      - docker
+      - system
+      - prune
+      - '-a'
+      - '--volumes'
+    altAnswers:
+      - - docker
+        - system
+        - prune
+        - '--volumes'
+        - '-a'
+    distractors:
+      - '--all-volumes'
+      - rm
+    explanation: '-a добавляет неиспользуемые образы с тегами, --volumes — анонимные тома. Флага --all-volumes нет.'
+  - id: t7.s10.l05.t09
+    type: single_choice
+    question: 'Нужно удалить только неиспользуемые образы старше суток. Какая команда подходит?'
+    options:
+      - 'docker image prune -a --filter until=24h'
+      - 'docker image prune --age 1d'
+      - 'docker rmi --old'
+      - 'docker system df --clean'
+    correctIndex: 0
+    explanation: 'Фильтр until оставляет объекты, созданные позже указанного срока. Флагов --age, --old и --clean нет.'
+  - id: t7.s10.l05.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы system prune удалил и неиспользуемые анонимные тома'
+    template: 'docker system prune -a ___'
+    acceptedAnswers:
+      - '--volumes'
+    explanation: 'Тома не удаляются по умолчанию, чтобы не потерять данные. --volumes нужно указать явно.'
+  - id: t7.s10.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь флаг prune и его смысл'
+    pairs:
+      - left: '-a'
+        right: 'Все неиспользуемые образы, не только висячие'
+      - left: '--volumes'
+        right: 'Ещё и анонимные тома'
+      - left: '-f'
+        right: 'Без подтверждения'
+      - left: '--filter until=24h'
+        right: 'Только старше суток'
+    explanation: 'Флаги расширяют или сужают уборку. Сочетай их осознанно: -a и --volumes удаляют больше всего.'
+  - id: t7.s10.l05.t12
+    type: assemble
+    prompt: 'Собери команду: очистить кэш сборки без вопроса'
+    answer:
+      - docker
+      - builder
+      - prune
+      - '-f'
+    distractors:
+      - image
+      - '--cache'
+    explanation: 'Кэш сборки хранит BuildKit, за него отвечает docker builder. image prune удалил бы образы, а не кэш.'

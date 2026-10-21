@@ -1,0 +1,183 @@
+id: t7.s09.l01
+title: 'Читаем логи'
+theory:
+  title: 'Логи — первое, куда смотреть'
+  blocks:
+    - type: text
+      text: 'Если контейнер ведёт себя странно, начинай с docker logs. Он показывает stdout и stderr главного процесса, причём и у остановленного контейнера — пока тот не удалён.'
+    - type: code
+      code: |-
+        docker logs --tail 50 web     # последние 50 строк
+        docker logs -f web             # следить в реальном времени
+        docker logs --since 10m web    # за последние 10 минут
+        docker logs --since 2026-10-19T10:00:00 --until 2026-10-19T10:05:00 web
+        docker logs -t web             # с метками времени
+        docker logs web 2>&1 | grep -i error
+    - type: text
+      text: 'Зачем 2>&1: docker logs выводит stderr контейнера в свой stderr, а конвейер | передаёт дальше только stdout. 2>&1 перенаправляет stderr в stdout, и grep видит всё.'
+    - type: text
+      text: 'Официальный образ nginx пишет логи в stdout и stderr: его файлы логов — ссылки на /dev/stdout и /dev/stderr. Если программа пишет только в файл, docker logs его не покажет — ищи файл внутри контейнера.'
+    - type: text
+      text: 'Драйвер логов по умолчанию json-file хранит логи на хосте и без настройки не ограничивает их размер. Ограничение: --log-opt max-size=10m --log-opt max-file=3.'
+tasks:
+  - id: t7.s09.l01.t01
+    type: single_choice
+    question: 'Контейнер упал и находится в состоянии exited. Можно ли посмотреть его логи?'
+    options:
+      - 'Нет, логи удаляются при остановке'
+      - 'Да, docker logs работает, пока контейнер не удалён'
+      - 'Только если он был запущен с -it'
+      - 'Только через docker exec'
+    correctIndex: 1
+    explanation: 'Логи хранятся вместе с контейнером, а не с процессом. Поэтому после падения они доступны и часто объясняют причину. docker rm удалит их вместе с контейнером.'
+  - id: t7.s09.l01.t02
+    type: true_false
+    statement: 'Команда docker logs web | grep error найдёт и строки, которые приложение писало в stderr (контейнер запущен без -t).'
+    answer: false
+    explanation: 'stderr контейнера идёт в stderr команды docker logs, а | передаёт только stdout. Нужно добавить 2>&1 перед |.'
+  - id: t7.s09.l01.t03
+    type: assemble
+    prompt: 'Собери команду: показать последние 50 строк логов контейнера web'
+    answer:
+      - docker
+      - logs
+      - '--tail'
+      - '50'
+      - web
+    altAnswers:
+      - - docker
+        - logs
+        - web
+        - '--tail'
+        - '50'
+    distractors:
+      - '--head'
+      - '--last'
+    explanation: '--tail N выводит только N последних строк, чтобы не листать весь журнал. Флагов --head и --last нет.'
+  - id: t7.s09.l01.t04
+    type: fill_blank
+    prompt: 'Впиши перенаправление, чтобы grep видел и stderr'
+    template: 'docker logs web ___ | grep -i error'
+    acceptedAnswers:
+      - '2>&1'
+    explanation: '2>&1 отправляет поток ошибок (2) туда же, куда обычный вывод (1). Так конвейер получает оба потока.'
+  - id: t7.s09.l01.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker logs и его смысл'
+    pairs:
+      - left: '--tail 50'
+        right: 'Последние 50 строк'
+      - left: '-f'
+        right: 'Следить за новыми строками'
+      - left: '--since 10m'
+        right: 'За последние 10 минут'
+      - left: '-t'
+        right: 'Метки времени'
+      - left: '--until'
+        right: 'Не позже указанного момента'
+    explanation: 'Флаги можно сочетать: --since и --until вырезают окно времени, -t помогает сопоставить события, -f — следить вживую.'
+  - id: t7.s09.l01.t06
+    type: single_choice
+    question: 'Программа пишет логи только в /var/log/app.log внутри контейнера. Что покажет docker logs?'
+    options:
+      - 'Содержимое app.log'
+      - 'Только то, что попало в stdout и stderr, — возможно, ничего'
+      - 'Ошибку: файл не найден'
+      - 'Логи демона Docker'
+    correctIndex: 1
+    explanation: 'docker logs читает лишь потоки главного процесса. Файл внутри контейнера можно открыть через docker exec или настроить приложение писать в stdout.'
+  - id: t7.s09.l01.t07
+    type: true_false
+    statement: 'По умолчанию драйвер json-file не ограничивает размер логов контейнера.'
+    answer: true
+    explanation: 'Без max-size логи болтливого контейнера могут занять весь диск. Ограничение задают через --log-opt или в настройках демона.'
+  - id: t7.s09.l01.t08
+    type: assemble
+    prompt: 'Собери команду: следить за логами контейнера api с метками времени'
+    answer:
+      - docker
+      - logs
+      - '-f'
+      - '-t'
+      - api
+    altAnswers:
+      - - docker
+        - logs
+        - '-f'
+        - api
+        - '-t'
+      - - docker
+        - logs
+        - '-t'
+        - '-f'
+        - api
+      - - docker
+        - logs
+        - '-t'
+        - api
+        - '-f'
+      - - docker
+        - logs
+        - api
+        - '-f'
+        - '-t'
+      - - docker
+        - logs
+        - api
+        - '-t'
+        - '-f'
+    distractors:
+      - '--tail'
+      - '-d'
+    explanation: '-f продолжает выводить новые строки, -t добавляет время к каждой. Порядок флагов не важен.'
+  - id: t7.s09.l01.t09
+    type: single_choice
+    question: 'Почему логи nginx из официального образа видны в docker logs?'
+    options:
+      - 'Docker читает все файлы в /var/log'
+      - 'Файлы логов nginx — ссылки на /dev/stdout и /dev/stderr'
+      - 'nginx отправляет логи прямо демону по сети'
+      - 'Так работает любое приложение'
+    correctIndex: 1
+    explanation: 'Авторы образа связали файлы логов со стандартными потоками. nginx думает, что пишет в файл, а данные попадают в docker logs.'
+  - id: t7.s09.l01.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы показать логи только за последние 30 минут'
+    template: 'docker logs ___ 30m web'
+    acceptedAnswers:
+      - '--since'
+    explanation: '--since принимает длительность (30m, 2h) или точное время. Это быстрее, чем искать нужный момент во всём журнале.'
+  - id: t7.s09.l01.t11
+    type: match_pairs
+    prompt: 'Сопоставь термин и его смысл'
+    pairs:
+      - left: stdout
+        right: 'Обычный вывод программы'
+      - left: stderr
+        right: 'Поток ошибок'
+      - left: '2>&1'
+        right: 'Перенаправить stderr в stdout'
+      - left: 'json-file'
+        right: 'Драйвер логов по умолчанию'
+    explanation: 'docker logs собирает оба потока главного процесса, а драйвер json-file хранит их на хосте.'
+  - id: t7.s09.l01.t12
+    type: assemble
+    prompt: 'Собери команду: запустить nginx в фоне, ограничив файл логов 10 мегабайтами'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--log-opt'
+      - 'max-size=10m'
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '--log-opt'
+        - 'max-size=10m'
+        - '-d'
+        - nginx
+    distractors:
+      - '--log-size'
+      - '--tail'
+    explanation: '--log-opt передаёт настройку драйверу логов, max-size=10m ограничивает размер файла. Флаги стоят до имени образа.'

@@ -1,0 +1,152 @@
+id: t7.s08.l05
+title: 'docker compose up/down/ps/logs'
+theory:
+  title: 'Управляем проектом'
+  blocks:
+    - type: code
+      code: |-
+        docker compose up -d          # создать и запустить в фоне
+        docker compose ps             # контейнеры проекта
+        docker compose logs -f api    # логи api и дальше
+        docker compose exec db psql -U postgres
+        docker compose restart api    # перезапустить
+        docker compose stop           # остановить, не удаляя
+        docker compose down           # удалить контейнеры и сеть
+        docker compose down -v        # и тома проекта
+        docker compose ls             # все проекты
+    - type: text
+      text: 'up создаёт сеть, тома и контейнеры и запускает их. Без -d вывод всех сервисов идёт в терминал, а Ctrl+C останавливает проект. Повторный up пересоздаёт только сервисы, у которых изменилась конфигурация или образ.'
+    - type: text
+      text: 'down удаляет контейнеры и сеть, но именованные тома оставляет — данные базы целы. -v удаляет и тома. stop только останавливает контейнеры.'
+    - type: text
+      text: 'Команды работают с проектом из текущей папки. exec выполняет команду в уже работающем сервисе, как docker exec, но по имени сервиса.'
+tasks:
+  - id: t7.s08.l05.t01
+    type: single_choice
+    question: 'Что останется после docker compose down без флагов?'
+    options:
+      - 'Ничего'
+      - 'Именованные тома с данными'
+      - 'Контейнеры в состоянии exited'
+      - 'Сеть проекта'
+    correctIndex: 1
+    explanation: 'down удаляет контейнеры и сеть, а тома бережёт, чтобы случайно не потерять данные. Удалить их можно флагом -v.'
+  - id: t7.s08.l05.t02
+    type: true_false
+    statement: 'docker compose stop удаляет контейнеры проекта.'
+    answer: false
+    explanation: 'stop только останавливает контейнеры, и docker compose start поднимет их снова. Удаляет контейнеры down.'
+  - id: t7.s08.l05.t03
+    type: assemble
+    prompt: 'Собери команду: следить за логами сервиса api'
+    answer:
+      - docker
+      - compose
+      - logs
+      - '-f'
+      - api
+    altAnswers:
+      - - docker
+        - compose
+        - logs
+        - api
+        - '-f'
+    distractors:
+      - '--tail'
+      - ps
+    explanation: 'logs с именем сервиса показывает только его вывод, а -f продолжает показывать новые строки, как docker logs -f.'
+  - id: t7.s08.l05.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы down удалил и тома проекта'
+    template: 'docker compose down ___'
+    acceptedAnswers:
+      - '-v'
+      - '--volumes'
+    explanation: '-v удаляет тома из файла и анонимные тома контейнеров. Данные в них пропадут, поэтому флаг используют осознанно.'
+  - id: t7.s08.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду docker compose и её действие'
+    pairs:
+      - left: 'up -d'
+        right: 'Создать и запустить в фоне'
+      - left: ps
+        right: 'Список контейнеров проекта'
+      - left: logs
+        right: 'Вывод сервисов'
+      - left: stop
+        right: 'Остановить без удаления'
+      - left: down
+        right: 'Удалить контейнеры и сеть'
+    explanation: 'Подкоманды Compose повторяют знакомые docker-команды, но действуют сразу на весь проект или на сервис по имени.'
+  - id: t7.s08.l05.t06
+    type: single_choice
+    question: 'Ты изменил ports у сервиса web и снова выполнил docker compose up -d. Что произойдёт?'
+    options:
+      - 'Ничего: сначала нужен down'
+      - 'Compose пересоздаст только контейнер web'
+      - 'Compose пересоздаст все контейнеры проекта'
+      - 'Compose удалит тома'
+    correctIndex: 1
+    explanation: 'Compose сравнивает текущую конфигурацию с запущенной и пересоздаёт только изменённые сервисы. Остальные продолжают работать.'
+  - id: t7.s08.l05.t07
+    type: true_false
+    statement: 'docker compose up без -d выводит логи всех сервисов в терминал.'
+    answer: true
+    explanation: 'Без -d Compose остаётся на переднем плане и показывает вывод всех сервисов с префиксами имён. Ctrl+C остановит проект.'
+  - id: t7.s08.l05.t08
+    type: assemble
+    prompt: 'Собери команду: открыть psql в работающем сервисе db от пользователя postgres'
+    answer:
+      - docker
+      - compose
+      - exec
+      - db
+      - psql
+      - '-U'
+      - postgres
+    distractors:
+      - start
+      - logs
+    explanation: 'exec запускает дополнительную команду в уже работающем контейнере сервиса. Всё после имени сервиса — сама команда.'
+  - id: t7.s08.l05.t09
+    type: single_choice
+    question: 'Какая команда покажет список всех проектов Compose на машине?'
+    options:
+      - 'docker compose ls'
+      - 'docker compose ps'
+      - 'docker compose config'
+      - 'docker compose logs'
+    correctIndex: 0
+    explanation: 'ls выводит проекты и их статус. ps показывает контейнеры только текущего проекта.'
+  - id: t7.s08.l05.t10
+    type: fill_blank
+    prompt: 'Впиши подкоманду, которая пересоберёт образы и запустит проект'
+    template: 'docker compose ___ -d --build'
+    acceptedAnswers:
+      - up
+    explanation: '--build — флаг up: перед запуском образы с секцией build собираются заново.'
+  - id: t7.s08.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь команду и результат'
+    pairs:
+      - left: down
+        right: 'Контейнеры и сеть удалены, тома целы'
+      - left: 'down -v'
+        right: 'Удалены и тома проекта'
+      - left: stop
+        right: 'Контейнеры остановлены, но сохранены'
+      - left: restart
+        right: 'Контейнеры перезапущены'
+    explanation: 'Чем дальше от stop к down -v, тем больше удаляется. Для обычной перезагрузки хватает restart или stop и start.'
+  - id: t7.s08.l05.t12
+    type: assemble
+    prompt: 'Собери команду: удалить контейнеры, сеть и тома проекта'
+    answer:
+      - docker
+      - compose
+      - down
+      - '-v'
+    distractors:
+      - stop
+      - rm
+    explanation: 'down удаляет контейнеры и сеть, -v добавляет тома. rm удаляет только остановленные контейнеры, а stop ничего не удаляет.'

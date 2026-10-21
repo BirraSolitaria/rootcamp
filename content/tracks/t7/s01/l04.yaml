@@ -1,0 +1,130 @@
+id: t7.s01.l04
+title: 'docker version и docker info'
+theory:
+  title: 'Проверяем, что Docker на месте'
+  blocks:
+    - type: text
+      text: 'docker version показывает версии двух частей. Блок Client — версия CLI. Блок Server — версия Docker Engine (демона), а также containerd и runc. Версии клиента и сервера могут не совпадать.'
+    - type: text
+      text: 'Если демон недоступен, docker version всё равно выведет блок Client, а вместо Server — ошибку подключения. Так сразу видно, что проблема в демоне, а не в CLI.'
+    - type: text
+      text: 'docker info выводит сводку о системе: число контейнеров (Running, Paused, Stopped), число образов (Images), Storage Driver — как слои образов хранятся на диске, Docker Root Dir — каталог с данными Docker (на Linux /var/lib/docker), а также число CPU и объём памяти.'
+    - type: text
+      text: 'Флаг --format принимает шаблон Go и выводит только нужное поле — удобно в скриптах:'
+    - type: code
+      code: |-
+        docker version --format '{{.Server.Version}}'
+        docker info --format '{{.ServerVersion}}'
+        docker --version   # одна строка с версией CLI
+tasks:
+  - id: t7.s01.l04.t01
+    type: single_choice
+    question: 'Что показывает блок Server в выводе docker version?'
+    options:
+      - 'Только версию CLI'
+      - 'Версии Docker Engine, containerd и runc'
+      - 'Список запущенных контейнеров'
+      - 'Адрес Docker Hub'
+    correctIndex: 1
+    explanation: 'Server — это всё, что работает на стороне демона: сам Docker Engine и компоненты, через которые он запускает контейнеры. Версия CLI выводится отдельно, в блоке Client.'
+  - id: t7.s01.l04.t02
+    type: true_false
+    statement: 'Если демон остановлен, docker version вообще ничего не выведет.'
+    answer: false
+    explanation: 'Версию клиента CLI знает сам, без демона, поэтому блок Client печатается всегда. Вместо блока Server появится ошибка подключения — это и подсказывает, что не работает демон.'
+  - id: t7.s01.l04.t03
+    type: assemble
+    prompt: 'Собери команду: вывести только версию сервера (Docker Engine)'
+    answer:
+      - docker
+      - version
+      - '--format'
+      - "'{{.Server.Version}}'"
+    distractors:
+      - "'{{.Client.Version}}'"
+      - info
+    explanation: '--format с шаблоном Go оставляет в выводе одно поле. Версия демона лежит в разделе Server, а шаблон с Client вернул бы версию CLI.'
+  - id: t7.s01.l04.t04
+    type: fill_blank
+    prompt: 'Впиши команду, которая покажет число контейнеров и образов, Storage Driver и Docker Root Dir'
+    template: 'docker ___   # сводка о системе Docker'
+    acceptedAnswers:
+      - info
+      - 'system info'
+    explanation: 'docker info (полная форма — docker system info) спрашивает у демона сводку о системе. docker version показывает только версии компонентов.'
+  - id: t7.s01.l04.t05
+    type: single_choice
+    question: 'Где на Linux по умолчанию хранятся данные Docker: образы, контейнеры, тома?'
+    options:
+      - '/var/lib/docker'
+      - '/etc/docker'
+      - '/usr/bin/docker'
+      - '/var/run/docker.sock'
+    correctIndex: 0
+    explanation: 'Docker Root Dir по умолчанию — /var/lib/docker. В /etc/docker лежат настройки демона, /usr/bin/docker — это сам CLI, а /var/run/docker.sock — сокет для связи с демоном.'
+  - id: t7.s01.l04.t06
+    type: match_pairs
+    prompt: 'Сопоставь поле из вывода docker info и его смысл'
+    pairs:
+      - left: 'Containers'
+        right: 'Сколько всего контейнеров'
+      - left: 'Images'
+        right: 'Сколько образов'
+      - left: 'Storage Driver'
+        right: 'Как слои образов хранятся на диске'
+      - left: 'Docker Root Dir'
+        right: 'Каталог с данными Docker'
+    explanation: 'docker info — первая команда для диагностики: по этим полям видно, сколько объектов у демона, где он хранит данные и каким способом раскладывает слои.'
+  - id: t7.s01.l04.t07
+    type: true_false
+    statement: 'Версии клиента и сервера в выводе docker version могут не совпадать.'
+    answer: true
+    explanation: 'CLI и демон — разные программы, их можно обновлять по отдельности, а CLI может подключаться к удалённому демону. Поэтому docker version и показывает обе версии.'
+  - id: t7.s01.l04.t08
+    type: assemble
+    prompt: 'Собери команду: краткая сводка о системе Docker'
+    answer:
+      - docker
+      - info
+    distractors:
+      - version
+      - '--format'
+    explanation: 'docker info выводит сводку: контейнеры, образы, Storage Driver, Docker Root Dir, CPU и память. docker version показал бы только версии компонентов.'
+  - id: t7.s01.l04.t09
+    type: single_choice
+    question: 'Что делает флаг --format у docker version и docker info?'
+    options:
+      - 'Форматирует диск'
+      - 'Меняет язык вывода'
+      - 'Сохраняет вывод в файл'
+      - 'Выводит только нужные поля по шаблону Go'
+    correctIndex: 3
+    explanation: "Шаблон вида '{{.Поле}}' выбирает из ответа демона только нужное значение. Это удобно в скриптах, где весь вывод целиком не нужен."
+  - id: t7.s01.l04.t10
+    type: fill_blank
+    prompt: 'Впиши поле шаблона, чтобы docker info вывела версию Docker Engine'
+    template: "docker info --format '{{.___}}'"
+    acceptedAnswers:
+      - 'ServerVersion'
+    explanation: 'В docker info версия демона хранится в поле ServerVersion. У docker version структура другая, там то же значение лежит в .Server.Version.'
+  - id: t7.s01.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь команду и её результат'
+    pairs:
+      - left: 'docker version'
+        right: 'Версии клиента и сервера'
+      - left: 'docker info'
+        right: 'Сводка о системе Docker'
+      - left: 'docker --version'
+        right: 'Одна строка с версией CLI'
+    explanation: 'docker --version отвечает сам клиент, без демона, поэтому там только версия CLI. docker version и docker info обращаются к демону и показывают больше.'
+  - id: t7.s01.l04.t12
+    type: assemble
+    prompt: 'Собери команду: показать версии клиента и сервера'
+    answer:
+      - docker
+      - version
+    distractors:
+      - info
+      - '--version'
+    explanation: 'docker version выводит оба блока, Client и Server. docker --version показал бы только версию CLI, а docker info — сводку о системе.'

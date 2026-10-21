@@ -1,0 +1,190 @@
+id: t7.s04.l02
+title: 'Именованные тома'
+theory:
+  title: 'Тома, которыми управляет Docker'
+  blocks:
+    - type: text
+      text: 'Именованный том создаёт и хранит Docker. На Linux его данные лежат в /var/lib/docker/volumes/ИМЯ/_data, но обращаться к ним надо через Docker, а не напрямую.'
+    - type: code
+      code: |-
+        docker volume create dbdata
+        docker run -d -e POSTGRES_PASSWORD=secret \
+          -v pgdata:/var/lib/postgresql/data postgres:16
+        docker run -d --mount type=volume,source=cache,target=/data redis
+    - type: text
+      text: 'Если тома из -v ещё нет, docker run создаст его сам. Один том можно подключить к нескольким контейнерам.'
+    - type: text
+      text: '--mount делает то же, что -v, но в явном виде ключ=значение: type — вид монтирования, source — имя тома, target (или dst) — путь в контейнере. Его легче читать в длинных командах.'
+    - type: text
+      text: 'Если подключить пустой том в папку, где в образе уже есть файлы, Docker скопирует их в том. Так база сразу получает начальное содержимое.'
+    - type: text
+      text: '-v /data без имени создаёт анонимный том со случайным именем. Его трудно найти, поэтому данным лучше давать имя.'
+tasks:
+  - id: t7.s04.l02.t01
+    type: single_choice
+    question: 'Что делает -v dbdata:/var/lib/postgresql/data?'
+    options:
+      - 'Копирует папку контейнера на хост'
+      - 'Создаёт папку dbdata в текущей директории'
+      - 'Подключает том dbdata в эту папку контейнера, создав том при необходимости'
+      - 'Делает папку контейнера доступной только для чтения'
+    correctIndex: 2
+    explanation: 'Слева от двоеточия — имя тома, справа — путь в контейнере. Если тома dbdata нет, Docker создаст его при запуске.'
+  - id: t7.s04.l02.t02
+    type: true_false
+    statement: 'Если тома из флага -v ещё нет, docker run создаст его автоматически.'
+    answer: true
+    explanation: 'Предварительный docker volume create необязателен: Docker создаст именованный том при первом запуске контейнера, который на него ссылается.'
+  - id: t7.s04.l02.t03
+    type: assemble
+    prompt: 'Собери команду: создать именованный том dbdata'
+    answer:
+      - docker
+      - volume
+      - create
+      - dbdata
+    distractors:
+      - new
+      - add
+    explanation: 'Тома управляются через объект volume. create создаёт пустой том, который потом подключают к контейнерам через -v или --mount.'
+  - id: t7.s04.l02.t04
+    type: fill_blank
+    prompt: 'Впиши ключ --mount, задающий путь внутри контейнера'
+    template: '--mount type=volume,source=dbdata,___=/data'
+    acceptedAnswers:
+      - target
+      - destination
+      - dst
+    explanation: 'target указывает, куда смонтировать том в контейнере. destination и dst — его синонимы.'
+  - id: t7.s04.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь запись и тип тома'
+    pairs:
+      - left: '-v dbdata:/data'
+        right: 'Именованный том'
+      - left: '-v /data'
+        right: 'Анонимный том со случайным именем'
+      - left: '--mount type=volume,source=dbdata,target=/data'
+        right: 'Именованный том в длинном синтаксисе'
+    explanation: 'Если у -v есть только путь в контейнере, Docker создаёт анонимный том. Имя тома делает данные легко находимыми и переиспользуемыми.'
+  - id: t7.s04.l02.t06
+    type: single_choice
+    question: 'Где на Linux по умолчанию лежат данные именованных томов?'
+    options:
+      - '/tmp/docker'
+      - '/var/lib/docker/volumes/'
+      - '/home/docker/volumes/'
+      - '/etc/docker/volumes/'
+    correctIndex: 1
+    explanation: 'Тома лежат внутри каталога данных Docker, /var/lib/docker/volumes/ИМЯ/_data. Менять их там вручную не стоит: этим управляет Docker.'
+  - id: t7.s04.l02.t07
+    type: true_false
+    statement: 'Если подключить пустой том в папку, где в образе уже есть файлы, том останется пустым, а файлы образа станут не видны.'
+    answer: false
+    explanation: 'Для пустого тома Docker сначала копирует в него содержимое папки из образа. Поэтому приложение видит свои файлы, а дальше они хранятся в томе.'
+  - id: t7.s04.l02.t08
+    type: assemble
+    prompt: 'Собери команду: запустить postgres:16 в фоне с паролем secret и томом pgdata для данных'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '-e'
+      - 'POSTGRES_PASSWORD=secret'
+      - '-v'
+      - 'pgdata:/var/lib/postgresql/data'
+      - 'postgres:16'
+    altAnswers:
+      - - docker
+        - run
+        - '-d'
+        - '-v'
+        - 'pgdata:/var/lib/postgresql/data'
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - 'postgres:16'
+      - - docker
+        - run
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - '-d'
+        - '-v'
+        - 'pgdata:/var/lib/postgresql/data'
+        - 'postgres:16'
+      - - docker
+        - run
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - '-v'
+        - 'pgdata:/var/lib/postgresql/data'
+        - '-d'
+        - 'postgres:16'
+      - - docker
+        - run
+        - '-v'
+        - 'pgdata:/var/lib/postgresql/data'
+        - '-d'
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - 'postgres:16'
+      - - docker
+        - run
+        - '-v'
+        - 'pgdata:/var/lib/postgresql/data'
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - '-d'
+        - 'postgres:16'
+    distractors:
+      - '/var/lib/postgresql/data:pgdata'
+      - '--tmpfs'
+    explanation: 'postgres:16 хранит базу в /var/lib/postgresql/data, поэтому том подключают туда. Тогда данные переживут удаление и пересоздание контейнера.'
+  - id: t7.s04.l02.t09
+    type: single_choice
+    question: 'Чем --mount отличается от -v для томов?'
+    options:
+      - '--mount работает только с bind mounts'
+      - '--mount копирует данные, а -v ссылается на них'
+      - '-v устарел и больше не работает'
+      - 'Результат тот же, но параметры записываются явно: type, source, target'
+    correctIndex: 3
+    explanation: 'Оба флага подключают том. --mount длиннее, зато каждый параметр подписан, и команду легче читать и проверять.'
+  - id: t7.s04.l02.t10
+    type: fill_blank
+    prompt: 'Впиши действие, чтобы создать том'
+    template: 'docker volume ___ dbdata'
+    acceptedAnswers:
+      - create
+    explanation: 'Как и у других объектов Docker, действие идёт после объекта: docker volume create. Заранее созданный том удобно потом подключать к разным контейнерам.'
+  - id: t7.s04.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь ключ --mount и его смысл'
+    pairs:
+      - left: type
+        right: 'Вид монтирования'
+      - left: source
+        right: 'Имя тома'
+      - left: target
+        right: 'Путь внутри контейнера'
+    explanation: 'Ключи пишутся через запятую без пробелов: type=volume,source=dbdata,target=/data. Порядок ключей неважен.'
+  - id: t7.s04.l02.t12
+    type: assemble
+    prompt: 'Собери команду: запустить redis в фоне с томом cache в /data через --mount'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--mount'
+      - 'type=volume,source=cache,target=/data'
+      - redis
+    altAnswers:
+      - - docker
+        - run
+        - '--mount'
+        - 'type=volume,source=cache,target=/data'
+        - '-d'
+        - redis
+    distractors:
+      - '-v'
+      - 'type=bind,source=cache,target=/data'
+    explanation: 'type=volume говорит, что source — имя тома. С type=bind Docker ждал бы путь на хосте, а cache — не абсолютный путь.'

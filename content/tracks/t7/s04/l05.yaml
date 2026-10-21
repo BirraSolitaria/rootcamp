@@ -1,0 +1,140 @@
+id: t7.s04.l05
+title: 'docker volume ls/inspect/rm/prune'
+theory:
+  title: 'Управляем томами'
+  blocks:
+    - type: code
+      code: |-
+        docker volume ls                      # список томов
+        docker volume ls -f dangling=true     # не подключены ни к одному контейнеру
+        docker volume inspect dbdata          # подробности в JSON
+        docker volume rm dbdata               # удалить том
+        docker volume prune                   # удалить неиспользуемые анонимные
+        docker volume prune -a                # и именованные тоже
+        docker rm -v web                      # контейнер + его анонимные тома
+    - type: text
+      text: 'docker volume inspect показывает Name, Driver (обычно local), Mountpoint — путь к данным на хосте — и CreatedAt — время создания.'
+    - type: text
+      text: 'Том, который использует хотя бы один контейнер, даже остановленный, удалить нельзя: сначала удали контейнер.'
+    - type: text
+      text: 'Начиная с Docker 23, docker volume prune по умолчанию удаляет только неиспользуемые анонимные тома. Чтобы удалить и именованные, нужен флаг -a (--all). Удалённые данные не вернуть, поэтому prune сначала спрашивает подтверждение.'
+tasks:
+  - id: t7.s04.l05.t01
+    type: single_choice
+    question: 'Что удаляет docker volume prune без флагов в Docker 23 и новее?'
+    options:
+      - 'Все тома без исключения'
+      - 'Неиспользуемые анонимные тома'
+      - 'Все неиспользуемые тома, включая именованные'
+      - 'Только тома остановленных контейнеров'
+    correctIndex: 1
+    explanation: 'Чтобы случайно не потерять важные данные, prune по умолчанию не трогает именованные тома. Для них нужен флаг -a.'
+  - id: t7.s04.l05.t02
+    type: true_false
+    statement: 'docker volume rm удалит том, даже если его использует остановленный контейнер.'
+    answer: false
+    explanation: 'Остановленный контейнер всё ещё ссылается на том, и Docker откажется его удалять. Сначала нужно удалить контейнер.'
+  - id: t7.s04.l05.t03
+    type: assemble
+    prompt: 'Собери команду: показать подробности о томе dbdata'
+    answer:
+      - docker
+      - volume
+      - inspect
+      - dbdata
+    distractors:
+      - show
+      - ls
+    explanation: 'inspect выводит JSON с драйвером, точкой монтирования на хосте и временем создания. Подкоманды show у docker volume нет.'
+  - id: t7.s04.l05.t04
+    type: fill_blank
+    prompt: 'Впиши действие, чтобы вывести список томов'
+    template: 'docker volume ___'
+    acceptedAnswers:
+      - ls
+      - list
+    explanation: 'ls и list — синонимы. Список показывает драйвер и имя каждого тома, а у анонимных томов имя — длинный случайный хеш.'
+  - id: t7.s04.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду для томов и её действие'
+    pairs:
+      - left: 'docker volume ls'
+        right: 'Показать список томов'
+      - left: 'docker volume inspect dbdata'
+        right: 'Показать подробности тома'
+      - left: 'docker volume rm dbdata'
+        right: 'Удалить конкретный том'
+      - left: 'docker volume prune -a'
+        right: 'Удалить все неиспользуемые тома'
+    explanation: 'ls и inspect только читают информацию. rm удаляет один том, а prune -a — сразу все тома, к которым не подключён ни один контейнер.'
+  - id: t7.s04.l05.t06
+    type: single_choice
+    question: 'Какое поле в docker volume inspect показывает, где данные тома лежат на хосте?'
+    options:
+      - 'Driver'
+      - 'Name'
+      - 'CreatedAt'
+      - 'Mountpoint'
+    correctIndex: 3
+    explanation: 'Mountpoint — путь к данным тома на хосте, обычно /var/lib/docker/volumes/ИМЯ/_data. Driver показывает, какой драйвер хранит том.'
+  - id: t7.s04.l05.t07
+    type: true_false
+    statement: 'docker volume prune -a удаляет и именованные тома, которые не использует ни один контейнер.'
+    answer: true
+    explanation: '-a (--all) снимает ограничение «только анонимные». Перед запуском стоит проверить docker volume ls, чтобы не потерять нужные данные.'
+  - id: t7.s04.l05.t08
+    type: assemble
+    prompt: 'Собери команду: показать тома, не подключённые ни к одному контейнеру'
+    answer:
+      - docker
+      - volume
+      - ls
+      - '-f'
+      - 'dangling=true'
+    distractors:
+      - '-a'
+      - prune
+    explanation: 'Фильтр dangling=true оставляет только тома, на которые не ссылается ни один контейнер. Это кандидаты на удаление.'
+  - id: t7.s04.l05.t09
+    type: single_choice
+    question: 'Как удалить контейнер web вместе с его анонимными томами?'
+    options:
+      - 'docker volume rm web'
+      - 'docker rm --all web'
+      - 'docker rm -v web'
+      - 'docker rm web --prune'
+    correctIndex: 2
+    explanation: '-v у docker rm удаляет анонимные тома контейнера. Именованные тома остаются: их могут использовать другие контейнеры.'
+  - id: t7.s04.l05.t10
+    type: fill_blank
+    prompt: 'Впиши действие, чтобы удалить том'
+    template: 'docker volume ___ dbdata   # удалить том'
+    acceptedAnswers:
+      - rm
+      - remove
+    explanation: 'rm и remove — синонимы. Том удалится вместе с данными, если его не использует ни один контейнер.'
+  - id: t7.s04.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь поле docker volume inspect и его смысл'
+    pairs:
+      - left: 'Name'
+        right: 'Имя тома'
+      - left: 'Driver'
+        right: 'Драйвер хранения, обычно local'
+      - left: 'Mountpoint'
+        right: 'Путь к данным на хосте'
+      - left: 'CreatedAt'
+        right: 'Время создания'
+    explanation: 'Драйвер local хранит данные на диске хоста по пути из Mountpoint. Другие драйверы могут хранить тома, например, в сетевом хранилище.'
+  - id: t7.s04.l05.t12
+    type: assemble
+    prompt: 'Собери команду: удалить все неиспользуемые тома, включая именованные'
+    answer:
+      - docker
+      - volume
+      - prune
+      - '-a'
+    distractors:
+      - rm
+      - '--volumes'
+    explanation: 'Без -a prune удалил бы только анонимные тома. С -a уходят все тома, к которым не подключён ни один контейнер, поэтому команда спросит подтверждение.'

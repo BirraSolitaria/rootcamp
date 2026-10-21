@@ -1,0 +1,139 @@
+id: t7.s01.l05
+title: 'Первый запуск: hello-world'
+theory:
+  title: 'Что происходит при docker run hello-world'
+  blocks:
+    - type: code
+      code: 'docker run hello-world'
+    - type: text
+      text: |-
+        1. CLI отправляет демону запрос на запуск.
+        2. Демон ищет образ hello-world локально. Если его нет, CLI сообщает «Unable to find image 'hello-world:latest' locally» и просит демона скачать (pull) образ из Docker Hub.
+        3. Демон создаёт из образа контейнер и запускает его.
+        4. Программа в контейнере печатает «Hello from Docker!» и завершается, а вместе с ней останавливается и контейнер.
+    - type: text
+      text: 'Если тег не указан, Docker подставляет тег latest: hello-world — это hello-world:latest.'
+    - type: text
+      text: 'Завершённый контейнер не удаляется: он виден в docker ps -a со статусом Exited (0). Код 0 значит «успешно». Docker даёт ему случайное имя вроде happy_turing. Повторный docker run уже не скачивает образ, но создаёт ещё один новый контейнер.'
+    - type: code
+      code: |-
+        docker ps -a
+        docker rm happy_turing      # удалить остановленный контейнер
+        docker run --rm hello-world # удалить сразу после завершения
+tasks:
+  - id: t7.s01.l05.t01
+    type: single_choice
+    question: 'Что делает Docker, если образа hello-world нет локально?'
+    options:
+      - 'Сразу завершает команду с ошибкой'
+      - 'Собирает образ из Dockerfile'
+      - 'Скачивает его из Docker Hub и запускает контейнер'
+      - 'Запускает пустой контейнер без образа'
+    correctIndex: 2
+    explanation: 'docker run сначала ищет образ локально, а если не находит — делает pull из реестра (по умолчанию Docker Hub). Только после этого из образа создаётся контейнер.'
+  - id: t7.s01.l05.t02
+    type: true_false
+    statement: 'После вывода «Hello from Docker!» контейнер hello-world продолжает работать в фоне.'
+    answer: false
+    explanation: 'Контейнер живёт, пока работает его главный процесс. Программа hello-world печатает текст и завершается, поэтому контейнер сразу переходит в статус Exited.'
+  - id: t7.s01.l05.t03
+    type: assemble
+    prompt: 'Собери команду: запустить hello-world и удалить контейнер сразу после завершения'
+    answer:
+      - docker
+      - run
+      - '--rm'
+      - 'hello-world'
+    distractors:
+      - rm
+      - '-a'
+    explanation: 'Флаги docker run пишутся до имени образа: всё, что идёт после образа, передаётся программе внутри контейнера. --rm удаляет контейнер, как только он завершится.'
+  - id: t7.s01.l05.t04
+    type: fill_blank
+    prompt: 'Впиши тег, который Docker подставляет, если тег не указан'
+    template: 'hello-world — это то же самое, что hello-world:___'
+    acceptedAnswers:
+      - latest
+    explanation: "Без явного тега Docker использует latest. Именно поэтому CLI при первом запуске пишет 'hello-world:latest'."
+  - id: t7.s01.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь шаг docker run hello-world и то, что на нём происходит'
+    pairs:
+      - left: '1. Запрос'
+        right: 'CLI отправляет команду демону'
+      - left: '2. Поиск'
+        right: 'Демон ищет образ локально'
+      - left: '3. Pull'
+        right: 'Демон скачивает образ из Docker Hub'
+      - left: '4. Запуск'
+        right: 'Из образа создаётся и стартует контейнер'
+      - left: '5. Выход'
+        right: 'Программа печатает текст и завершается'
+    explanation: 'Этот порядок одинаков для любого docker run: запрос к демону, поиск образа, при необходимости pull (CLI предупреждает об этом строкой «Unable to find image»), создание контейнера и работа его процесса до завершения.'
+  - id: t7.s01.l05.t06
+    type: single_choice
+    question: 'Какой статус будет у контейнера hello-world в docker ps -a после успешного запуска?'
+    options:
+      - 'Up'
+      - 'Exited (0)'
+      - 'Exited (1)'
+      - 'Created'
+    correctIndex: 1
+    explanation: 'Программа завершилась, значит контейнер в статусе Exited, а код 0 означает успех. В docker ps -a это выглядит как «Exited (0) 5 seconds ago». Up был бы у работающего контейнера, а ненулевой код — признак ошибки.'
+  - id: t7.s01.l05.t07
+    type: true_false
+    statement: 'При повторном docker run hello-world образ уже есть локально, поэтому Docker не скачивает его снова.'
+    answer: true
+    explanation: 'Pull нужен, только если образа нет на машине. При повторном запуске Docker берёт локальный образ, но всё равно создаёт новый контейнер.'
+  - id: t7.s01.l05.t08
+    type: assemble
+    prompt: 'Собери команду: удалить остановленный контейнер с именем happy_turing'
+    answer:
+      - docker
+      - rm
+      - happy_turing
+    distractors:
+      - rmi
+      - '--rm'
+    explanation: 'docker rm удаляет контейнер по имени или ID. docker rmi удаляет образы, а не контейнеры, а --rm — это флаг docker run, а не отдельная команда.'
+  - id: t7.s01.l05.t09
+    type: single_choice
+    question: 'Ты дважды выполнил docker run hello-world. Сколько контейнеров покажет docker ps -a, если других не было?'
+    options:
+      - 'Один'
+      - 'Ни одного'
+      - 'Три'
+      - 'Два'
+    correctIndex: 3
+    explanation: 'Каждый docker run создаёт новый контейнер, а без --rm завершённые контейнеры остаются. Образ при этом один, его скачали только в первый раз.'
+  - id: t7.s01.l05.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы контейнер удалился сам после завершения'
+    template: 'docker run ___ hello-world'
+    acceptedAnswers:
+      - '--rm'
+    explanation: 'С флагом --rm Docker удаляет контейнер сразу после завершения, и в docker ps -a не копится мусор. Флаг ставится до имени образа.'
+  - id: t7.s01.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь команду и её действие'
+    pairs:
+      - left: 'docker run hello-world'
+        right: 'Создаёт и запускает новый контейнер'
+      - left: 'docker ps -a'
+        right: 'Показывает все контейнеры'
+      - left: 'docker rm happy_turing'
+        right: 'Удаляет остановленный контейнер'
+      - left: 'docker run --rm hello-world'
+        right: 'Запускает и удаляет после завершения'
+    explanation: 'run создаёт контейнеры, ps -a помогает их найти, rm удаляет. Флаг --rm объединяет запуск и уборку в одну команду.'
+  - id: t7.s01.l05.t12
+    type: assemble
+    prompt: 'Собери команду: запустить hello-world, явно указав тег по умолчанию'
+    answer:
+      - docker
+      - run
+      - 'hello-world:latest'
+    distractors:
+      - 'hello-world:default'
+      - start
+    explanation: 'Тег пишется через двоеточие после имени образа. Тег по умолчанию называется latest; тега default Docker не подставляет.'

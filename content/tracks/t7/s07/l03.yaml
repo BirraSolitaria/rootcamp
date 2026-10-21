@@ -1,0 +1,143 @@
+id: t7.s07.l03
+title: 'COPY --from'
+theory:
+  title: 'Забираем файлы из другого этапа'
+  blocks:
+    - type: text
+      text: 'COPY --from=источник путь_в_источнике путь_в_образе копирует файлы не из контекста сборки, а из другого этапа. Источник — имя этапа, его номер или даже любой образ из реестра.'
+    - type: code
+      code: |-
+        COPY --from=build /app/dist /usr/share/nginx/html
+        COPY --from=0 /bin/app /usr/local/bin/app
+        COPY --from=nginx:1.27 /etc/nginx/nginx.conf /etc/nginx/
+        COPY --from=build --chown=app:app /app/dist /srv
+    - type: text
+      text: 'Путь источника всегда считается от корня (/) того этапа: WORKDIR источника на него не влияет, поэтому пиши полный путь /app/dist. Путь назначения, если он относительный, считается от WORKDIR текущего этапа.'
+    - type: text
+      text: 'Копируй только нужное: бинарник или папку dist, а не весь / с исходниками и кэшем.'
+    - type: text
+      text: 'Если имя после --from не совпадает ни с одним этапом, Docker считает его образом и пытается скачать. Опечатка в имени этапа приводит к ошибке скачивания образа.'
+tasks:
+  - id: t7.s07.l03.t01
+    type: single_choice
+    question: 'Откуда копирует строка COPY --from=build /app/dist /srv?'
+    options:
+      - 'Из контекста сборки, папка build'
+      - 'Из файловой системы этапа build'
+      - 'С хоста из /app/dist'
+      - 'Из тома с именем build'
+    correctIndex: 1
+    explanation: '--from переключает источник с контекста сборки на этап build. Путь /app/dist ищется внутри результата этого этапа.'
+  - id: t7.s07.l03.t02
+    type: true_false
+    statement: 'В COPY --from можно указать не только этап, но и образ из реестра, например nginx:1.27.'
+    answer: true
+    explanation: 'Если имя не совпало с этапом, Docker воспринимает его как образ и берёт файлы оттуда. Так удобно забрать, например, готовый конфиг.'
+  - id: t7.s07.l03.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать /bin/app из этапа build в /usr/local/bin/app'
+    answer:
+      - 'COPY'
+      - '--from=build'
+      - '/bin/app'
+      - '/usr/local/bin/app'
+    distractors:
+      - 'ADD'
+      - '--target=build'
+    explanation: 'Порядок как у обычного COPY: сначала источник, потом назначение, а --from указывает этап. У ADD нет --from, а --target — флаг docker build.'
+  - id: t7.s07.l03.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы взять файлы из этапа build'
+    template: 'COPY ___=build /app/dist /usr/share/nginx/html'
+    acceptedAnswers:
+      - '--from'
+    explanation: 'Без --from COPY берёт файлы из контекста сборки. С --from=build — из файловой системы этапа build.'
+  - id: t7.s07.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь значение --from и откуда берутся файлы'
+    pairs:
+      - left: '--from=build'
+        right: 'Этап с именем build'
+      - left: '--from=0'
+        right: 'Первый этап файла'
+      - left: '--from=nginx:1.27'
+        right: 'Образ из реестра'
+      - left: 'без --from'
+        right: 'Контекст сборки'
+    explanation: '--from принимает имя этапа, номер с нуля или образ. Без флага COPY работает как обычно — с контекстом сборки.'
+  - id: t7.s07.l03.t06
+    type: single_choice
+    question: 'Этап build с WORKDIR /app создал папку /app/dist. Какая строка правильно заберёт её?'
+    options:
+      - 'COPY --from=build dist /srv'
+      - 'COPY --from=build /app/dist /srv'
+      - 'COPY build:/app/dist /srv'
+      - 'COPY --stage=build /app/dist /srv'
+    correctIndex: 1
+    explanation: 'Путь источника в COPY --from считается от корня этапа, а не от его WORKDIR, поэтому dist искался бы как /dist. Флага --stage нет.'
+  - id: t7.s07.l03.t07
+    type: true_false
+    statement: 'Относительный путь назначения в COPY --from считается от WORKDIR текущего этапа.'
+    answer: true
+    explanation: 'Назначение — это место в образе, который собирается сейчас, поэтому для него действует WORKDIR текущего этапа, как у обычного COPY.'
+  - id: t7.s07.l03.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: взять /etc/nginx/nginx.conf из образа nginx:1.27 в папку /etc/nginx/'
+    answer:
+      - 'COPY'
+      - '--from=nginx:1.27'
+      - '/etc/nginx/nginx.conf'
+      - '/etc/nginx/'
+    distractors:
+      - 'FROM'
+      - '--from=nginx'
+    explanation: 'В --from можно указать образ с тегом. Без тега --from=nginx взял бы nginx:latest, а нужна версия 1.27.'
+  - id: t7.s07.l03.t09
+    type: single_choice
+    question: 'Что произойдёт при строке COPY --from=biuld …, если этапа biuld в файле нет?'
+    options:
+      - 'Docker создаст пустой этап biuld'
+      - 'Docker попробует скачать образ biuld, и сборка упадёт'
+      - 'Строка будет пропущена'
+      - 'Файлы возьмутся из последнего этапа'
+    correctIndex: 1
+    explanation: 'Неизвестное имя Docker считает образом из реестра. Образа biuld нет, поэтому скачивание завершится ошибкой.'
+  - id: t7.s07.l03.t10
+    type: fill_blank
+    prompt: 'В этапе build бинарник лежит в /out/app. Впиши путь источника'
+    template: 'COPY --from=build ___ /usr/local/bin/app'
+    acceptedAnswers:
+      - '/out/app'
+    explanation: 'Источник указывают полным путём внутри этапа build. Назначение — путь в собираемом образе.'
+  - id: t7.s07.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь часть строки COPY --from=build --chown=app:app /app/dist /srv'
+    pairs:
+      - left: '--from=build'
+        right: 'Откуда копировать'
+      - left: '--chown=app:app'
+        right: 'Владелец файлов'
+      - left: '/app/dist'
+        right: 'Путь в этапе build'
+      - left: '/srv'
+        right: 'Путь в новом образе'
+    explanation: '--from и --chown можно сочетать: файлы из этапа сразу получают нужного владельца, и отдельный RUN chown не нужен.'
+  - id: t7.s07.l03.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать /app/dist из этапа build в /srv с владельцем app:app'
+    answer:
+      - 'COPY'
+      - '--from=build'
+      - '--chown=app:app'
+      - '/app/dist'
+      - '/srv'
+    altAnswers:
+      - - 'COPY'
+        - '--chown=app:app'
+        - '--from=build'
+        - '/app/dist'
+        - '/srv'
+    distractors:
+      - 'RUN'
+      - '--user=app'
+    explanation: 'Флаги COPY можно писать в любом порядке, но до путей. Владельца задаёт --chown; флага --user у COPY нет.'

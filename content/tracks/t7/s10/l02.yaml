@@ -1,0 +1,224 @@
+id: t7.s10.l02
+title: 'Размер образа'
+theory:
+  title: 'Меньше — быстрее и безопаснее'
+  blocks:
+    - type: text
+      text: |-
+        Маленький образ быстрее скачивается и запускается, занимает меньше места и содержит меньше уязвимостей. Главные приёмы:
+        1) лёгкая база: slim, alpine, distroless;
+        2) многоэтапная сборка — инструменты остаются на этапе build;
+        3) .dockerignore — лишнее не попадает в контекст;
+        4) чистить кэш в том же RUN, где он появился.
+    - type: code
+      code: |-
+        RUN apt-get update \
+         && apt-get install -y --no-install-recommends curl \
+         && rm -rf /var/lib/apt/lists/*
+        RUN pip install --no-cache-dir -r requirements.txt
+        RUN npm ci --omit=dev
+    - type: text
+      text: 'Удаление в отдельном RUN не уменьшит образ: файл уже записан в предыдущий слой, новый слой лишь скрывает его.'
+    - type: text
+      text: '--no-install-recommends не ставит рекомендуемые пакеты apt, --no-cache-dir не хранит кэш pip, --omit=dev пропускает dev-зависимости npm. Размер образа видно в docker image ls, а размер каждого слоя — в docker history образ.'
+tasks:
+  - id: t7.s10.l02.t01
+    type: single_choice
+    question: 'Почему RUN rm -rf /var/lib/apt/lists/* отдельной строкой не уменьшает образ?'
+    options:
+      - 'Файлы остались в предыдущем слое'
+      - 'rm не работает при сборке'
+      - 'Docker восстанавливает удалённые файлы'
+      - 'Нужно добавить --force'
+    correctIndex: 0
+    explanation: 'Слои только добавляются. Новый слой помечает файлы удалёнными, но байты остаются в старом слое и скачиваются вместе с образом.'
+  - id: t7.s10.l02.t02
+    type: true_false
+    statement: 'Чем меньше пакетов в образе, тем меньше в нём потенциальных уязвимостей.'
+    answer: true
+    explanation: 'Уязвимости живут в программах и библиотеках. Пакет, которого нет в образе, нельзя атаковать и не нужно обновлять.'
+  - id: t7.s10.l02.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: установить зависимости pip из requirements.txt без кэша'
+    answer:
+      - 'RUN'
+      - pip
+      - install
+      - '--no-cache-dir'
+      - '-r'
+      - requirements.txt
+    altAnswers:
+      - - 'RUN'
+        - pip
+        - install
+        - '-r'
+        - requirements.txt
+        - '--no-cache-dir'
+      - - 'RUN'
+        - pip
+        - '--no-cache-dir'
+        - install
+        - '-r'
+        - requirements.txt
+    distractors:
+      - '--slim'
+      - 'COPY'
+    explanation: '--no-cache-dir не даёт pip сохранить скачанные пакеты внутри слоя. Флага --slim у pip нет.'
+  - id: t7.s10.l02.t04
+    type: fill_blank
+    prompt: 'Впиши флаг apt-get, чтобы не ставить рекомендуемые пакеты'
+    template: 'apt-get install -y ___ curl'
+    acceptedAnswers:
+      - '--no-install-recommends'
+    explanation: 'apt по умолчанию тянет рекомендуемые пакеты, которые приложению часто не нужны. Флаг заметно уменьшает слой.'
+  - id: t7.s10.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг и что он даёт'
+    pairs:
+      - left: '--no-install-recommends'
+        right: 'apt: без рекомендуемых пакетов'
+      - left: '--no-cache-dir'
+        right: 'pip: не хранить кэш'
+      - left: '--omit=dev'
+        right: 'npm: без dev-зависимостей'
+      - left: 'rm -rf /var/lib/apt/lists/*'
+        right: 'Удалить списки пакетов apt'
+    explanation: 'Каждый приём убирает то, что нужно только при установке, а не при работе приложения.'
+  - id: t7.s10.l02.t06
+    type: single_choice
+    question: 'Какой приём обычно сильнее всего уменьшает образ компилируемого приложения?'
+    options:
+      - 'Многоэтапная сборка: в финал идёт только бинарник'
+      - 'Переименовать образ'
+      - 'Удалить исходники в последнем RUN'
+      - 'Убрать EXPOSE'
+    correctIndex: 0
+    explanation: 'Компилятор и SDK весят сотни мегабайт. Многоэтапная сборка оставляет их на этапе build, а удаление в отдельном RUN размер не уменьшит.'
+  - id: t7.s10.l02.t07
+    type: true_false
+    statement: 'Флаг --omit=dev у npm ci устанавливает только dev-зависимости.'
+    answer: false
+    explanation: 'omit значит «пропустить»: --omit=dev ставит всё, кроме dev-зависимостей. Тесты и сборщики в рабочем образе не нужны.'
+  - id: t7.s10.l02.t08
+    type: assemble
+    prompt: 'Собери команду: показать размер каждого слоя образа myapp'
+    answer:
+      - docker
+      - history
+      - myapp
+    distractors:
+      - inspect
+      - layers
+    explanation: 'history выводит слои с инструкцией, которая их создала, и размером. Так видно, какая строка Dockerfile раздувает образ.'
+  - id: t7.s10.l02.t09
+    type: single_choice
+    question: 'Что из этого не стоит класть в рабочий образ?'
+    options:
+      - 'Скомпилированный бинарник приложения'
+      - 'Папку .git и тесты'
+      - 'Конфигурацию по умолчанию'
+      - 'Сертификаты CA для HTTPS'
+    correctIndex: 1
+    explanation: 'История git и тесты при работе не нужны, только увеличивают образ и могут раскрыть лишнее. Их исключают через .dockerignore.'
+  - id: t7.s10.l02.t10
+    type: fill_blank
+    prompt: 'Впиши флаг npm, чтобы не ставить dev-зависимости'
+    template: 'RUN npm ci ___'
+    acceptedAnswers:
+      - '--omit=dev'
+      - '--omit dev'
+    explanation: '--omit=dev оставляет только зависимости для работы приложения. Это может сократить node_modules в разы.'
+  - id: t7.s10.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь базовый образ и его описание'
+    pairs:
+      - left: 'ubuntu:24.04'
+        right: 'Полный дистрибутив'
+      - left: 'python:3.12-slim'
+        right: 'Урезанный Debian с Python'
+      - left: 'alpine:3.20'
+        right: 'Мини-Linux на musl'
+      - left: 'gcr.io/distroless/static-debian12'
+        right: 'Без оболочки и пакетного менеджера'
+    explanation: 'Сверху вниз образы становятся меньше, но и инструментов внутри для отладки остаётся всё меньше.'
+  - id: t7.s10.l02.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: установить curl без рекомендуемых пакетов'
+    answer:
+      - 'RUN'
+      - 'apt-get'
+      - install
+      - '-y'
+      - '--no-install-recommends'
+      - curl
+    altAnswers:
+      - - 'RUN'
+        - 'apt-get'
+        - install
+        - '-y'
+        - curl
+        - '--no-install-recommends'
+      - - 'RUN'
+        - 'apt-get'
+        - install
+        - '--no-install-recommends'
+        - '-y'
+        - curl
+      - - 'RUN'
+        - 'apt-get'
+        - install
+        - '--no-install-recommends'
+        - curl
+        - '-y'
+      - - 'RUN'
+        - 'apt-get'
+        - install
+        - curl
+        - '-y'
+        - '--no-install-recommends'
+      - - 'RUN'
+        - 'apt-get'
+        - install
+        - curl
+        - '--no-install-recommends'
+        - '-y'
+      - - 'RUN'
+        - 'apt-get'
+        - '-y'
+        - install
+        - '--no-install-recommends'
+        - curl
+      - - 'RUN'
+        - 'apt-get'
+        - '-y'
+        - install
+        - curl
+        - '--no-install-recommends'
+      - - 'RUN'
+        - 'apt-get'
+        - '-y'
+        - '--no-install-recommends'
+        - install
+        - curl
+      - - 'RUN'
+        - 'apt-get'
+        - '--no-install-recommends'
+        - install
+        - '-y'
+        - curl
+      - - 'RUN'
+        - 'apt-get'
+        - '--no-install-recommends'
+        - install
+        - curl
+        - '-y'
+      - - 'RUN'
+        - 'apt-get'
+        - '--no-install-recommends'
+        - '-y'
+        - install
+        - curl
+    distractors:
+      - '--minimal'
+      - apk
+    explanation: '-y отвечает «да» без вопросов, --no-install-recommends отключает лишние пакеты. apt-get принимает опции в любом месте команды.'

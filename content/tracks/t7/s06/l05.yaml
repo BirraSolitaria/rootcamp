@@ -1,0 +1,223 @@
+id: t7.s06.l05
+title: 'docker build, контекст и .dockerignore'
+theory:
+  title: 'Собираем образ'
+  blocks:
+    - type: code
+      code: |-
+        docker build -t myapp:1.0 .
+        docker build -f docker/Dockerfile.dev -t myapp:dev .
+        docker build --no-cache -t myapp .
+    - type: text
+      text: 'Последний аргумент — контекст сборки, здесь . (текущая папка). Его файлы отправляются сборщику BuildKit, и COPY видит только их: путь вроде ../secret.txt недоступен.'
+    - type: text
+      text: '-t задаёт имя и тег образа. -f указывает путь к Dockerfile, по умолчанию берётся Dockerfile в корне контекста. --no-cache собирает все слои заново, не используя кэш.'
+    - type: text
+      text: 'Файл .dockerignore в корне контекста исключает файлы из контекста. Сборка быстрее, кэш стабильнее, а секреты и мусор не попадут в образ.'
+    - type: code
+      code: |-
+        # .dockerignore
+        node_modules
+        .git
+        .env
+        **/*.log
+        *.md
+        !README.md
+    - type: text
+      text: 'Шаблоны считаются от корня контекста: *.md — только в корне, **/*.log — в любой папке. ! возвращает файл, который исключили строки выше.'
+tasks:
+  - id: t7.s06.l05.t01
+    type: single_choice
+    question: 'Что означает точка в docker build -t myapp .?'
+    options:
+      - 'Собрать все Dockerfile в системе'
+      - 'Текущая папка — контекст сборки'
+      - 'Тег образа по умолчанию'
+      - 'Повторить предыдущую сборку'
+    correctIndex: 1
+    explanation: 'Контекст — набор файлов, доступных при сборке. Точка значит «текущая папка», и Dockerfile по умолчанию тоже ищется там.'
+  - id: t7.s06.l05.t02
+    type: true_false
+    statement: 'COPY ../secret.txt /app/ скопирует файл из папки уровнем выше контекста.'
+    answer: false
+    explanation: 'Сборщику передаётся только контекст. Файлы за его пределами недоступны, и COPY не может выйти выше корня контекста.'
+  - id: t7.s06.l05.t03
+    type: assemble
+    prompt: 'Собери команду: собрать образ myapp:1.0 из текущей папки'
+    answer:
+      - docker
+      - build
+      - '-t'
+      - 'myapp:1.0'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'myapp:1.0'
+    distractors:
+      - run
+      - '--name'
+    explanation: '-t задаёт имя и тег, точка — контекст. Флага --name у docker build нет: имя образа задаётся именно через -t.'
+  - id: t7.s06.l05.t04
+    type: fill_blank
+    prompt: 'Впиши имя файла с исключениями из контекста сборки'
+    template: 'Файл ___ в корне контекста исключает ненужные файлы'
+    acceptedAnswers:
+      - '.dockerignore'
+    explanation: '.dockerignore работает как .gitignore: перечисленные файлы не отправляются сборщику и не могут попасть в образ через COPY.'
+  - id: t7.s06.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker build и его смысл'
+    pairs:
+      - left: '-t'
+        right: 'Имя и тег образа'
+      - left: '-f'
+        right: 'Путь к Dockerfile'
+      - left: '--no-cache'
+        right: 'Собрать без кэша'
+      - left: '--build-arg'
+        right: 'Значение аргумента ARG'
+    explanation: 'Эти флаги покрывают почти все повседневные сборки. Контекст при этом всегда передаётся последним аргументом.'
+  - id: t7.s06.l05.t06
+    type: single_choice
+    question: 'Зачем добавлять node_modules и .git в .dockerignore?'
+    options:
+      - 'Чтобы Docker их удалил с хоста'
+      - 'Чтобы они попали в образ быстрее'
+      - 'Без этого docker build не запустится'
+      - 'Чтобы не отправлять лишнее в контекст: сборка быстрее, образ чище'
+    correctIndex: 3
+    explanation: 'Эти папки бывают огромными, а в образе не нужны: зависимости ставятся внутри образа. Исключение ускоряет передачу контекста и бережёт кэш.'
+  - id: t7.s06.l05.t07
+    type: true_false
+    statement: 'По умолчанию docker build ищет файл с именем Dockerfile в корне контекста.'
+    answer: true
+    explanation: 'Если Dockerfile называется иначе или лежит в другой папке, путь к нему указывают флагом -f.'
+  - id: t7.s06.l05.t08
+    type: assemble
+    prompt: 'Собери команду: собрать myapp:dev по файлу docker/Dockerfile.dev, контекст — текущая папка'
+    answer:
+      - docker
+      - build
+      - '-f'
+      - 'docker/Dockerfile.dev'
+      - '-t'
+      - 'myapp:dev'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:dev'
+        - '-f'
+        - 'docker/Dockerfile.dev'
+        - '.'
+      - - docker
+        - build
+        - '.'
+        - '-f'
+        - 'docker/Dockerfile.dev'
+        - '-t'
+        - 'myapp:dev'
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'myapp:dev'
+        - '-f'
+        - 'docker/Dockerfile.dev'
+      - - docker
+        - build
+        - '-f'
+        - 'docker/Dockerfile.dev'
+        - '.'
+        - '-t'
+        - 'myapp:dev'
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:dev'
+        - '.'
+        - '-f'
+        - 'docker/Dockerfile.dev'
+    distractors:
+      - '-c'
+      - 'Dockerfile'
+    explanation: '-f меняет только путь к Dockerfile, а контекст по-прежнему задаёт точка. Так один проект может иметь несколько Dockerfile.'
+  - id: t7.s06.l05.t09
+    type: single_choice
+    question: 'В .dockerignore строки *.md и затем !README.md. Какие .md-файлы из корня попадут в контекст?'
+    options:
+      - 'Только README.md'
+      - 'Все .md-файлы'
+      - 'Ни одного'
+      - 'Все, кроме README.md'
+    correctIndex: 0
+    explanation: 'Сначала *.md исключает все .md в корне, затем ! возвращает README.md. Порядок строк важен: более поздняя строка побеждает.'
+  - id: t7.s06.l05.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы собрать образ без кэша'
+    template: 'docker build ___ -t myapp .'
+    acceptedAnswers:
+      - '--no-cache'
+    explanation: '--no-cache заставляет заново выполнить все инструкции. Это нужно, например, чтобы RUN apt-get update точно получил свежие пакеты.'
+  - id: t7.s06.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь строку .dockerignore и её действие'
+    pairs:
+      - left: node_modules
+        right: 'Исключить папку node_modules'
+      - left: '**/*.log'
+        right: 'Исключить .log-файлы в любой папке'
+      - left: '!README.md'
+        right: 'Вернуть файл, исключённый выше'
+      - left: '.env'
+        right: 'Не отправлять файл с секретами'
+    explanation: 'Шаблоны считаются от корня контекста, ** означает любую вложенность, а ! делает исключение из исключения.'
+  - id: t7.s06.l05.t12
+    type: assemble
+    prompt: 'Собери команду: собрать образ myapp из текущей папки без кэша'
+    answer:
+      - docker
+      - build
+      - '--no-cache'
+      - '-t'
+      - myapp
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '-t'
+        - myapp
+        - '--no-cache'
+        - '.'
+      - - docker
+        - build
+        - '.'
+        - '--no-cache'
+        - '-t'
+        - myapp
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - myapp
+        - '--no-cache'
+      - - docker
+        - build
+        - '--no-cache'
+        - '.'
+        - '-t'
+        - myapp
+      - - docker
+        - build
+        - '-t'
+        - myapp
+        - '.'
+        - '--no-cache'
+    distractors:
+      - '--clean'
+      - '--fresh'
+    explanation: '--no-cache выполняет все инструкции заново. Флагов --clean и --fresh у docker build нет.'

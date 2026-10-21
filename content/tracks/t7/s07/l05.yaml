@@ -1,0 +1,187 @@
+id: t7.s07.l05
+title: '--target и маленькие базовые образы'
+theory:
+  title: 'Нужный этап и лёгкая база'
+  blocks:
+    - type: code
+      code: |-
+        docker build --target build -t myapp:build .
+        docker build -t myapp .   # до последнего этапа
+    - type: text
+      text: '--target имя собирает образ только до указанного этапа включительно. Так из одного Dockerfile получают образ для разработки или тестов (этап с компилятором) и маленький образ для продакшена (последний этап).'
+    - type: text
+      text: |-
+        Лёгкие базы для финального этапа:
+        • alpine — Linux в несколько мегабайт с менеджером пакетов apk и библиотекой musl вместо glibc: программа, собранная под glibc, может не запуститься;
+        • slim (python:3.12-slim) — урезанный Debian;
+        • distroless — только среда запуска, нет даже оболочки sh;
+        • scratch — пустой образ.
+    - type: code
+      code: |-
+        FROM golang:1.23 AS build
+        WORKDIR /src
+        COPY . .
+        RUN CGO_ENABLED=0 go build -o /app .
+
+        FROM scratch
+        COPY --from=build /app /app
+        ENTRYPOINT ["/app"]
+    - type: text
+      text: 'CGO_ENABLED=0 собирает Go-программу статически, без внешних библиотек, поэтому она работает даже в scratch. В scratch и distroless нельзя зайти через docker exec … sh: оболочки там нет.'
+tasks:
+  - id: t7.s07.l05.t01
+    type: single_choice
+    question: 'Что делает docker build --target build .?'
+    options:
+      - 'Собирает этап build и этапы, от которых он зависит'
+      - 'Собирает все этапы, кроме build'
+      - 'Задаёт тег build итоговому образу'
+      - 'Запускает контейнер из этапа build'
+    correctIndex: 0
+    explanation: '--target останавливает сборку на этапе build. Он становится итоговым образом, а этапы после него не собираются.'
+  - id: t7.s07.l05.t02
+    type: true_false
+    statement: 'В образе на базе scratch есть оболочка sh.'
+    answer: false
+    explanation: 'scratch — совершенно пустой образ. В нём есть только то, что ты сам скопировал, обычно один статический бинарник.'
+  - id: t7.s07.l05.t03
+    type: assemble
+    prompt: 'Собери команду: собрать этап test в образ myapp:test из текущей папки'
+    answer:
+      - docker
+      - build
+      - '--target'
+      - test
+      - '-t'
+      - 'myapp:test'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '--target'
+        - test
+        - '.'
+        - '-t'
+        - 'myapp:test'
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:test'
+        - '--target'
+        - test
+        - '.'
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:test'
+        - '.'
+        - '--target'
+        - test
+      - - docker
+        - build
+        - '.'
+        - '--target'
+        - test
+        - '-t'
+        - 'myapp:test'
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'myapp:test'
+        - '--target'
+        - test
+    distractors:
+      - '--stage'
+      - '--from'
+    explanation: '--target выбирает этап, -t даёт имя образу, точка — контекст. Флагов --stage и --from у docker build нет.'
+  - id: t7.s07.l05.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы собрать только этап build'
+    template: 'docker build ___ build -t myapp:dev .'
+    acceptedAnswers:
+      - '--target'
+    explanation: '--target задаёт этап, на котором сборка остановится. Удобно для образа разработки с компилятором и отладчиком.'
+  - id: t7.s07.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь базовый образ и его особенность'
+    pairs:
+      - left: alpine
+        right: 'Мини-Linux с apk и musl'
+      - left: 'python:3.12-slim'
+        right: 'Урезанный Debian с Python'
+      - left: distroless
+        right: 'Только среда запуска, без оболочки'
+      - left: scratch
+        right: 'Совсем пустой образ'
+    explanation: 'Чем меньше в базе, тем меньше образ и уязвимостей, но тем меньше и инструментов для отладки внутри контейнера.'
+  - id: t7.s07.l05.t06
+    type: single_choice
+    question: 'Go-бинарник из golang:1.23, собранный без CGO_ENABLED=0, не запускается в alpine. Вероятная причина?'
+    options:
+      - 'Alpine не поддерживает Go'
+      - 'Бинарник связан с glibc, а в alpine — musl'
+      - 'Alpine запрещает ENTRYPOINT'
+      - 'В alpine нет папки /usr/local/bin'
+    correctIndex: 1
+    explanation: 'С включённым cgo бинарник может зависеть от glibc из Debian. В alpine вместо неё musl, и нужная библиотека не находится.'
+  - id: t7.s07.l05.t07
+    type: true_false
+    statement: 'Без --target docker build собирает образ до последнего этапа.'
+    answer: true
+    explanation: 'По умолчанию итоговым считается последний этап. --target нужен, только чтобы остановиться раньше.'
+  - id: t7.s07.l05.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: собрать Go-программу в /app без cgo'
+    answer:
+      - 'RUN'
+      - 'CGO_ENABLED=0'
+      - go
+      - build
+      - '-o'
+      - '/app'
+      - '.'
+    distractors:
+      - 'ENV'
+      - '--static'
+    explanation: 'Переменная перед командой действует только для неё. С CGO_ENABLED=0 бинарник статический и запустится даже в scratch.'
+  - id: t7.s07.l05.t09
+    type: single_choice
+    question: 'Почему в distroless-контейнер не получается зайти командой docker exec -it app sh?'
+    options:
+      - 'В образе нет оболочки sh'
+      - 'distroless запрещает docker exec'
+      - 'Контейнер работает только в фоне'
+      - 'Нужен флаг --privileged'
+    correctIndex: 0
+    explanation: 'docker exec запускает программу из образа контейнера. В distroless нет sh, поэтому запускать нечего.'
+  - id: t7.s07.l05.t10
+    type: fill_blank
+    prompt: 'Впиши имя пустого базового образа'
+    template: 'FROM ___'
+    acceptedAnswers:
+      - scratch
+    explanation: 'scratch не скачивается и не содержит файлов. Он подходит для статических бинарников, которым не нужна система.'
+  - id: t7.s07.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь приложение и подходящую базу финального этапа'
+    pairs:
+      - left: 'Статический Go-бинарник'
+        right: scratch
+      - left: 'Python-приложение'
+        right: 'python:3.12-slim'
+      - left: 'Статический сайт после npm run build'
+        right: 'nginx:1.27-alpine'
+    explanation: 'Финальной базе нужно ровно то, что требуется для запуска: бинарнику — ничего, Python-коду — интерпретатор, сайту — веб-сервер.'
+  - id: t7.s07.l05.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать бинарник /app из этапа build в пустой образ'
+    answer:
+      - 'COPY'
+      - '--from=build'
+      - '/app'
+      - '/app'
+    distractors:
+      - 'ADD'
+      - '/src'
+    explanation: 'В scratch нет ничего, поэтому бинарник переносят из этапа сборки через COPY --from. У ADD флага --from нет.'

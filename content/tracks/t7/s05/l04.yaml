@@ -1,0 +1,148 @@
+id: t7.s05.l04
+title: 'Команды docker network'
+theory:
+  title: 'Управляем сетями'
+  blocks:
+    - type: code
+      code: |-
+        docker network ls
+        docker network create -d bridge --subnet 10.10.0.0/24 appnet
+        docker network inspect appnet      # подсеть, контейнеры
+        docker network connect appnet web  # добавить контейнер в сеть
+        docker network disconnect appnet web
+        docker network rm appnet
+        docker network prune               # удалить неиспользуемые
+    - type: text
+      text: 'Флаги create: -d (--driver) — драйвер, --subnet — диапазон адресов, --gateway — адрес шлюза, --internal — сеть без выхода наружу: контейнеры видят друг друга, но не интернет.'
+    - type: text
+      text: 'Контейнер может быть в нескольких сетях сразу. connect и disconnect меняют это на лету, без перезапуска.'
+    - type: text
+      text: 'Сеть, к которой подключены контейнеры, удалить нельзя: Docker сообщит об активных подключениях (active endpoints). prune удаляет только пользовательские сети без контейнеров, а встроенные bridge, host и none не трогает.'
+tasks:
+  - id: t7.s05.l04.t01
+    type: single_choice
+    question: 'Что делает docker network connect appnet web?'
+    options:
+      - 'Создаёт сеть appnet для контейнера web'
+      - 'Переносит web из всех сетей в appnet'
+      - 'Подключает работающий контейнер web к сети appnet дополнительно'
+      - 'Публикует порты web в сети appnet'
+    correctIndex: 2
+    explanation: 'connect добавляет ещё одно подключение, прежние сети сохраняются. Контейнер получает IP в appnet и становится виден там по имени.'
+  - id: t7.s05.l04.t02
+    type: true_false
+    statement: 'Контейнер может быть подключён к нескольким сетям одновременно.'
+    answer: true
+    explanation: 'У контейнера появляется отдельный интерфейс в каждой сети. Так, например, api может видеть и сеть с базой, и сеть с фронтендом.'
+  - id: t7.s05.l04.t03
+    type: assemble
+    prompt: 'Собери команду: создать сеть appnet с подсетью 10.10.0.0/24'
+    answer:
+      - docker
+      - network
+      - create
+      - '--subnet'
+      - '10.10.0.0/24'
+      - appnet
+    altAnswers:
+      - - docker
+        - network
+        - create
+        - appnet
+        - '--subnet'
+        - '10.10.0.0/24'
+    distractors:
+      - '--ip'
+      - '10.10.0.0'
+    explanation: '--subnet задаёт диапазон адресов в нотации CIDR: адрес и длина маски через косую черту. Без /24 Docker не примет значение.'
+  - id: t7.s05.l04.t04
+    type: fill_blank
+    prompt: 'Впиши действие: отключить контейнер web от сети appnet'
+    template: 'docker network ___ appnet web'
+    acceptedAnswers:
+      - disconnect
+    explanation: 'disconnect — пара к connect. Контейнер продолжает работать, но больше не видит другие контейнеры этой сети.'
+  - id: t7.s05.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду docker network и действие'
+    pairs:
+      - left: ls
+        right: 'Показать список сетей'
+      - left: inspect
+        right: 'Подсеть и подключённые контейнеры'
+      - left: rm
+        right: 'Удалить конкретную сеть'
+      - left: prune
+        right: 'Удалить все неиспользуемые сети'
+    explanation: 'Как и для томов, inspect только читает, rm удаляет одну сеть, а prune — сразу все пользовательские сети без контейнеров.'
+  - id: t7.s05.l04.t06
+    type: single_choice
+    question: 'docker network rm appnet выдаёт ошибку про active endpoints. Почему?'
+    options:
+      - 'К сети ещё подключены контейнеры'
+      - 'Сеть appnet встроенная'
+      - 'У сети нет подсети'
+      - 'Нужно сначала выполнить docker network prune'
+    correctIndex: 0
+    explanation: 'Endpoint — подключение контейнера к сети. Сначала отключи или удали контейнеры, затем удали сеть.'
+  - id: t7.s05.l04.t07
+    type: true_false
+    statement: 'docker network prune удаляет встроенные сети bridge, host и none.'
+    answer: false
+    explanation: 'Встроенные сети нужны самому Docker, и prune их не трогает. Он удаляет только пользовательские сети без подключённых контейнеров.'
+  - id: t7.s05.l04.t08
+    type: assemble
+    prompt: 'Собери команду: подключить работающий контейнер web к сети appnet'
+    answer:
+      - docker
+      - network
+      - connect
+      - appnet
+      - web
+    distractors:
+      - attach
+      - join
+    explanation: 'Сначала имя сети, потом контейнер. Перезапуск не нужен: контейнер сразу получает IP в новой сети.'
+  - id: t7.s05.l04.t09
+    type: single_choice
+    question: 'Зачем создавать сеть с флагом --internal?'
+    options:
+      - 'Чтобы ускорить сеть'
+      - 'Чтобы сеть была доступна с других хостов'
+      - 'Чтобы сеть получила IP хоста'
+      - 'Чтобы контейнеры видели друг друга, но не имели выхода наружу'
+    correctIndex: 3
+    explanation: 'Внутренняя сеть подходит, например, для базы данных: приложение до неё достучится, а сама база в интернет не выйдет.'
+  - id: t7.s05.l04.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, задающий драйвер сети'
+    template: 'docker network create ___ bridge appnet'
+    acceptedAnswers:
+      - '-d'
+      - '--driver'
+    explanation: '-d — короткая форма --driver. Для bridge его можно не писать, но явное указание делает команду понятнее.'
+  - id: t7.s05.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker network create и его смысл'
+    pairs:
+      - left: '-d'
+        right: 'Драйвер сети'
+      - left: '--subnet'
+        right: 'Диапазон адресов'
+      - left: '--gateway'
+        right: 'Адрес шлюза'
+      - left: '--internal'
+        right: 'Без выхода наружу'
+    explanation: 'Обычно хватает имени сети, а остальное Docker выбирает сам. Флаги нужны, когда подсеть конфликтует с существующей или нужна изоляция.'
+  - id: t7.s05.l04.t12
+    type: assemble
+    prompt: 'Собери команду: показать подсеть и подключённые контейнеры сети appnet'
+    answer:
+      - docker
+      - network
+      - inspect
+      - appnet
+    distractors:
+      - show
+      - ls
+    explanation: 'inspect выводит JSON: в разделе IPAM — подсеть и шлюз, в разделе Containers — подключённые контейнеры и их IP.'

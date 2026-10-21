@@ -1,0 +1,181 @@
+id: t7.s07.l04
+title: 'Кэш слоёв и порядок инструкций'
+theory:
+  title: 'Порядок решает скорость'
+  blocks:
+    - type: text
+      text: 'При сборке BuildKit для каждой инструкции ищет готовый слой в кэше. Для RUN сравнивается текст команды, для COPY и ADD — ещё и содержимое копируемых файлов (их контрольные суммы; дата изменения не важна).'
+    - type: text
+      text: 'Как только одна инструкция промахнулась мимо кэша, все инструкции после неё выполняются заново. Поэтому сначала идёт то, что меняется редко, а в конце — то, что меняется часто.'
+    - type: code
+      code: |-
+        # Плохо: любая правка кода = npm ci заново
+        COPY . .
+        RUN npm ci
+
+        # Хорошо: npm ci из кэша, пока не изменился lock-файл
+        COPY package.json package-lock.json ./
+        RUN npm ci
+        COPY . .
+    - type: text
+      text: 'package-lock.json — lock-файл: точные версии всех зависимостей npm. В Python похожую роль играет requirements.txt с закреплёнными версиями (пакет==1.2.3).'
+    - type: text
+      text: 'RUN apt-get update возьмётся из кэша и не обновит списки пакетов, пока текст команды тот же. Поэтому update и install пишут в одном RUN.'
+    - type: text
+      text: 'docker build --progress=plain выводит подробный лог: у шагов, взятых из кэша, стоит CACHED.'
+tasks:
+  - id: t7.s07.l04.t01
+    type: single_choice
+    question: 'Ты изменил строку в app.js. С какой инструкции пересоберётся «хороший» вариант из теории?'
+    options:
+      - 'С FROM'
+      - 'С COPY package.json package-lock.json ./'
+      - 'С RUN npm ci'
+      - 'С COPY . .'
+    correctIndex: 3
+    explanation: 'package.json и lock-файл не менялись, поэтому их COPY и npm ci взяты из кэша. Первым промахом станет COPY . ., ведь изменился app.js.'
+  - id: t7.s07.l04.t02
+    type: true_false
+    statement: 'Если инструкция выполнилась заново, все инструкции после неё тоже выполнятся заново.'
+    answer: true
+    explanation: 'Каждый слой строится поверх предыдущего. Если нижний слой новый, верхние уже нельзя переиспользовать, и BuildKit выполняет их снова.'
+  - id: t7.s07.l04.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать только package.json и package-lock.json в текущую папку'
+    answer:
+      - 'COPY'
+      - package.json
+      - 'package-lock.json'
+      - './'
+    altAnswers:
+      - - 'COPY'
+        - 'package-lock.json'
+        - package.json
+        - './'
+    distractors:
+      - 'RUN'
+      - npm
+    explanation: 'Сначала копируют только файлы зависимостей. Тогда npm ci пересобирается лишь при их изменении, а не при каждой правке кода.'
+  - id: t7.s07.l04.t04
+    type: fill_blank
+    prompt: 'Впиши, как часто должно меняться то, что стоит в начале Dockerfile'
+    template: 'В начало Dockerfile ставят то, что меняется ___'
+    acceptedAnswers:
+      - 'редко'
+      - 'реже'
+    explanation: 'Промах кэша пересобирает всё ниже себя. Редко меняющиеся шаги наверху остаются в кэше, и сборка идёт быстро.'
+  - id: t7.s07.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь ситуацию и что выполнится заново («хороший» вариант из теории)'
+    pairs:
+      - left: 'Правка src/app.js'
+        right: 'Начиная с COPY . .'
+      - left: 'Новая зависимость в package.json'
+        right: 'Начиная с COPY package.json…'
+      - left: 'Сборка без изменений'
+        right: 'Ничего — всё из кэша'
+      - left: 'Сборка с --no-cache'
+        right: 'Все инструкции'
+    explanation: 'Пересборка начинается с первой инструкции, чьи входные данные изменились. --no-cache отключает кэш целиком.'
+  - id: t7.s07.l04.t06
+    type: single_choice
+    question: 'Почему RUN apt-get update в отдельной строке может дать устаревшие пакеты?'
+    options:
+      - 'Слой берётся из кэша, раз текст команды не изменился'
+      - 'apt-get update не работает при сборке'
+      - 'Docker удаляет списки пакетов после каждого RUN'
+      - 'Кэш хранит только слои COPY'
+    correctIndex: 0
+    explanation: 'Для RUN кэш сверяет только текст команды. Он не изменился, значит слой со старыми списками пакетов берётся из кэша.'
+  - id: t7.s07.l04.t07
+    type: true_false
+    statement: 'Если у файла поменялась только дата изменения, а содержимое то же, COPY возьмёт слой из кэша.'
+    answer: true
+    explanation: 'Для COPY и ADD считаются контрольные суммы содержимого. Дата изменения в них не входит, поэтому кэш остаётся действительным.'
+  - id: t7.s07.l04.t08
+    type: assemble
+    prompt: 'Собери команду: собрать образ app:2.0 из текущей папки с подробным логом, где видны CACHED-шаги'
+    answer:
+      - docker
+      - build
+      - '--progress=plain'
+      - '-t'
+      - 'app:2.0'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '--progress=plain'
+        - '.'
+        - '-t'
+        - 'app:2.0'
+      - - docker
+        - build
+        - '-t'
+        - 'app:2.0'
+        - '--progress=plain'
+        - '.'
+      - - docker
+        - build
+        - '-t'
+        - 'app:2.0'
+        - '.'
+        - '--progress=plain'
+      - - docker
+        - build
+        - '.'
+        - '--progress=plain'
+        - '-t'
+        - 'app:2.0'
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'app:2.0'
+        - '--progress=plain'
+    distractors:
+      - '--verbose'
+      - '--cache'
+    explanation: '--progress=plain печатает весь лог без сворачивания, и видно, какие шаги взяты из кэша. Флагов --verbose и --cache у docker build нет.'
+  - id: t7.s07.l04.t09
+    type: single_choice
+    question: 'Какой порядок инструкций лучше для кэша в Python-проекте?'
+    options:
+      - 'COPY . . → RUN pip install -r requirements.txt'
+      - 'COPY requirements.txt . → RUN pip install -r requirements.txt → COPY . .'
+      - 'RUN pip install -r requirements.txt → COPY requirements.txt .'
+      - 'COPY . . → COPY requirements.txt . → RUN pip install -r requirements.txt'
+    correctIndex: 1
+    explanation: 'Зависимости ставятся после копирования одного requirements.txt, а код копируется последним. Правка кода не заставит заново ставить пакеты.'
+  - id: t7.s07.l04.t10
+    type: fill_blank
+    prompt: 'Впиши файл, по которому pip ставит зависимости в этом слое'
+    template: 'RUN pip install -r ___'
+    acceptedAnswers:
+      - requirements.txt
+      - './requirements.txt'
+    explanation: 'Флаг -r читает список пакетов из файла. Если перед этим скопирован только requirements.txt, слой зависит лишь от него.'
+  - id: t7.s07.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь термин и его смысл в теме кэша'
+    pairs:
+      - left: 'CACHED'
+        right: 'Шаг взят из кэша'
+      - left: '--no-cache'
+        right: 'Собрать без кэша'
+      - left: '--progress=plain'
+        right: 'Подробный лог сборки'
+      - left: 'package-lock.json'
+        right: 'Точные версии зависимостей npm'
+    explanation: 'Кэш ускоряет сборку, --progress=plain показывает, где он сработал, а --no-cache выключает его, когда нужна полностью свежая сборка.'
+  - id: t7.s07.l04.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать requirements.txt в рабочую папку'
+    answer:
+      - 'COPY'
+      - requirements.txt
+      - '.'
+    distractors:
+      - 'RUN'
+      - pip
+    explanation: 'Точка — текущая WORKDIR. Отдельное копирование requirements.txt позволяет закэшировать установку зависимостей.'

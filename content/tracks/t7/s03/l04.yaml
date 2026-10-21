@@ -1,0 +1,154 @@
+id: t7.s03.l04
+title: 'ps, stop, start, restart, rm'
+theory:
+  title: 'Жизненный цикл контейнера'
+  blocks:
+    - type: text
+      text: 'Состояния контейнера: created (создан, не запускался), running (работает), paused (процессы заморожены командой docker pause), exited (главный процесс завершился). docker ps показывает работающие, docker ps -a — все.'
+    - type: code
+      code: |-
+        docker stop web        # SIGTERM, через 10 с — SIGKILL
+        docker stop -t 30 web  # ждать 30 секунд
+        docker kill web        # сразу SIGKILL
+        docker start web       # запустить остановленный
+        docker start -a web    # и показать его вывод
+        docker restart web     # stop + start
+        docker rm web          # удалить остановленный
+        docker rm -f web       # удалить даже работающий
+        docker container prune # удалить все остановленные
+    - type: text
+      text: 'docker stop сначала посылает сигнал SIGTERM (или другой, если образ задаёт STOPSIGNAL), чтобы процесс аккуратно завершился, а если за 10 секунд он не вышел — SIGKILL. docker kill сразу убивает процесс.'
+    - type: text
+      text: 'Остановленный контейнер не исчезает: его настройки и слой для записи с изменёнными файлами сохраняются, а docker start продолжает работу с ними. Память процессов при этом не сохраняется: программа стартует заново.'
+    - type: text
+      text: 'Контейнер можно указать по имени или по началу ID.'
+tasks:
+  - id: t7.s03.l04.t01
+    type: single_choice
+    question: 'Какой сигнал docker stop посылает главному процессу первым?'
+    options:
+      - 'SIGKILL'
+      - 'SIGTERM'
+      - 'SIGSTOP'
+      - 'SIGHUP'
+    correctIndex: 1
+    explanation: 'SIGTERM просит процесс завершиться аккуратно: сохранить данные и закрыть соединения. SIGKILL приходит, только если процесс не уложился в таймаут.'
+  - id: t7.s03.l04.t02
+    type: true_false
+    statement: 'docker start запускает остановленный контейнер с прежними настройками и файлами из его слоя для записи.'
+    answer: true
+    explanation: 'Остановка не удаляет контейнер. Его конфигурация и изменённые файлы сохраняются, пока не выполнен docker rm.'
+  - id: t7.s03.l04.t03
+    type: assemble
+    prompt: 'Собери команду: остановить контейнер web, дав ему 30 секунд на завершение'
+    answer:
+      - docker
+      - stop
+      - '-t'
+      - '30'
+      - web
+    altAnswers:
+      - - docker
+        - stop
+        - web
+        - '-t'
+        - '30'
+    distractors:
+      - kill
+      - '-f'
+    explanation: '-t задаёт таймаут между SIGTERM и SIGKILL. Это полезно для баз данных, которым нужно время, чтобы сбросить данные на диск.'
+  - id: t7.s03.l04.t04
+    type: fill_blank
+    prompt: 'Впиши команду, которая сразу посылает SIGKILL'
+    template: 'docker ___ web'
+    acceptedAnswers:
+      - kill
+      - 'container kill'
+    explanation: 'docker kill не ждёт аккуратного завершения. Используй его, когда процесс завис и не реагирует на docker stop.'
+  - id: t7.s03.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду управления контейнером и действие'
+    pairs:
+      - left: 'docker stop'
+        right: 'SIGTERM, затем SIGKILL по таймауту'
+      - left: 'docker kill'
+        right: 'Немедленный SIGKILL'
+      - left: 'docker restart'
+        right: 'Остановить и запустить снова'
+      - left: 'docker rm'
+        right: 'Удалить остановленный контейнер'
+    explanation: 'stop и kill только останавливают, контейнер остаётся. restart объединяет stop и start, а rm удаляет контейнер вместе с его слоем для записи.'
+  - id: t7.s03.l04.t06
+    type: single_choice
+    question: 'Как одной командой удалить работающий контейнер web?'
+    options:
+      - 'docker rm web'
+      - 'docker stop --rm web'
+      - 'docker rm -f web'
+      - 'docker prune web'
+    correctIndex: 2
+    explanation: 'Обычный docker rm откажется удалять работающий контейнер. -f (force) сначала принудительно останавливает его, а затем удаляет.'
+  - id: t7.s03.l04.t07
+    type: true_false
+    statement: 'По умолчанию docker stop ждёт до 10 секунд, прежде чем принудительно завершить процесс.'
+    answer: true
+    explanation: '10 секунд — таймаут по умолчанию между SIGTERM и SIGKILL. Его можно изменить флагом -t.'
+  - id: t7.s03.l04.t08
+    type: assemble
+    prompt: 'Собери команду: удалить все остановленные контейнеры'
+    answer:
+      - docker
+      - container
+      - prune
+    distractors:
+      - image
+      - '-a'
+    explanation: 'docker container prune удаляет все контейнеры в состоянии exited или created, спросив подтверждение. Работающие контейнеры он не трогает.'
+  - id: t7.s03.l04.t09
+    type: single_choice
+    question: 'Что сохранится после docker stop web и docker start web?'
+    options:
+      - 'Содержимое памяти процессов'
+      - 'Открытые сетевые соединения'
+      - 'Ничего: контейнер создаётся заново'
+      - 'Файлы, изменённые в слое для записи контейнера'
+    correctIndex: 3
+    explanation: 'Слой для записи живёт, пока контейнер не удалён. А процессы при остановке завершаются, поэтому их память и соединения теряются.'
+  - id: t7.s03.l04.t10
+    type: fill_blank
+    prompt: 'Впиши команду: остановить и сразу снова запустить контейнер'
+    template: 'docker ___ web   # stop и start одной командой'
+    acceptedAnswers:
+      - restart
+      - 'container restart'
+    explanation: 'restart — это stop и start одной командой. Удобно, чтобы приложение перечитало конфигурацию.'
+  - id: t7.s03.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь состояние контейнера и его смысл'
+    pairs:
+      - left: created
+        right: 'Создан, но ни разу не запускался'
+      - left: running
+        right: 'Главный процесс работает'
+      - left: paused
+        right: 'Процессы заморожены'
+      - left: exited
+        right: 'Главный процесс завершился'
+    explanation: 'Состояние видно в колонке STATUS у docker ps -a. paused бывает после docker pause, а exited — после остановки или завершения программы.'
+  - id: t7.s03.l04.t12
+    type: assemble
+    prompt: 'Собери команду: запустить остановленный контейнер web и показать его вывод'
+    answer:
+      - docker
+      - start
+      - '-a'
+      - web
+    altAnswers:
+      - - docker
+        - start
+        - web
+        - '-a'
+    distractors:
+      - run
+      - '-d'
+    explanation: 'docker start по умолчанию запускает контейнер в фоне. -a (attach) подключает терминал к выводу. docker run здесь не подходит: он создал бы новый контейнер.'

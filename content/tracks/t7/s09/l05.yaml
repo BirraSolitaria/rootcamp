@@ -1,0 +1,147 @@
+id: t7.s09.l05
+title: 'Частые ошибки: занятый порт, мгновенный выход'
+theory:
+  title: 'Разбираем типичные поломки'
+  blocks:
+    - type: text
+      text: 'Порт занят: docker run -p 8080:80 падает с ошибкой port is already allocated или address already in use. Порт хоста держит другой контейнер или программа. Решение — другой порт хоста (-p 8081:80) или остановить того, кто его держит.'
+    - type: code
+      code: |-
+        docker ps --filter publish=8080   # какой контейнер держит порт
+        sudo ss -ltnp | grep 8080         # какая программа хоста (Linux)
+    - type: text
+      text: 'Мгновенный выход: контейнер живёт, пока работает главный процесс. docker run -d ubuntu сразу завершается: bash без терминала видит конец ввода и выходит с кодом 0. Чтобы контейнер жил, нужен долгоживущий процесс, например sleep infinity.'
+    - type: text
+      text: 'Приложение слушает 127.0.0.1 внутри контейнера — -p не поможет: снаружи запросы приходят на другой интерфейс. Слушать нужно 0.0.0.0. Опечатка в имени образа даёт pull access denied.'
+    - type: text
+      text: 'Порядок отладки: docker ps -a (статус и код) → docker logs (что сказало приложение) → docker inspect (настройки, OOMKilled) → docker run --rm -it --entrypoint sh образ (осмотреться).'
+tasks:
+  - id: t7.s09.l05.t01
+    type: single_choice
+    question: 'docker run -p 8080:80 nginx выдаёт port is already allocated. Что делать?'
+    options:
+      - 'Взять другой порт хоста, например -p 8081:80'
+      - 'Поменять порт контейнера: -p 8080:81'
+      - 'Добавить флаг --force'
+      - 'Перезагрузить компьютер — других способов нет'
+    correctIndex: 0
+    explanation: 'Занят порт 8080 на хосте, а не в контейнере. Смена правой части ничего не даст, а другой порт слева сразу решит проблему.'
+  - id: t7.s09.l05.t02
+    type: true_false
+    statement: 'docker run -d ubuntu без команды останется работать в фоне.'
+    answer: false
+    explanation: 'CMD образа ubuntu — bash. Без -it у него нет ввода, он сразу выходит, а вместе с ним завершается и контейнер.'
+  - id: t7.s09.l05.t03
+    type: assemble
+    prompt: 'Собери команду: найти контейнер, который опубликовал порт 8080'
+    answer:
+      - docker
+      - ps
+      - '--filter'
+      - 'publish=8080'
+    distractors:
+      - port
+      - '-p'
+    explanation: 'Фильтр publish оставляет контейнеры, у которых опубликован указанный порт. Так сразу видно, кто его занял.'
+  - id: t7.s09.l05.t04
+    type: fill_blank
+    prompt: 'Впиши адрес, который должно слушать приложение в контейнере, чтобы работал -p'
+    template: 'app --host ___'
+    acceptedAnswers:
+      - '0.0.0.0'
+    explanation: '0.0.0.0 — все интерфейсы контейнера. Запросы через -p приходят на его сетевой интерфейс, а не на 127.0.0.1.'
+  - id: t7.s09.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь симптом и вероятную причину'
+    pairs:
+      - left: 'port is already allocated'
+        right: 'Порт хоста уже занят'
+      - left: 'Exited (0) сразу после старта'
+        right: 'Главному процессу нечего делать'
+      - left: 'pull access denied'
+        right: 'Опечатка в имени образа или нет доступа'
+      - left: 'Exited (137), OOMKilled true'
+        right: 'Не хватило памяти'
+      - left: 'Порт опубликован, но ответа нет'
+        right: 'Приложение слушает 127.0.0.1'
+    explanation: 'Большинство поломок узнаётся по сообщению или коду выхода. Запомни эти пары — они встречаются постоянно.'
+  - id: t7.s09.l05.t06
+    type: single_choice
+    question: 'Приложение слушает 127.0.0.1:3000, запущено с -p 3000:3000, но с хоста не открывается. Почему?'
+    options:
+      - '127.0.0.1 внутри контейнера — это сам контейнер, запросы снаружи туда не доходят'
+      - 'Порт 3000 зарезервирован Docker'
+      - 'Не хватает EXPOSE 3000'
+      - 'Нужно добавить --network none'
+    correctIndex: 0
+    explanation: 'У контейнера своя сеть и свой localhost. Docker пересылает запрос на сетевой интерфейс контейнера, а приложение его не слушает. EXPOSE для -p не нужен.'
+  - id: t7.s09.l05.t07
+    type: true_false
+    statement: 'Контейнер работает ровно столько, сколько работает его главный процесс.'
+    answer: true
+    explanation: 'Контейнер — это изолированный главный процесс. Он завершился — контейнер перешёл в exited, даже если внутри остались файлы.'
+  - id: t7.s09.l05.t08
+    type: assemble
+    prompt: 'Собери команду: запустить ubuntu в фоне так, чтобы контейнер не завершился сразу'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - ubuntu
+      - sleep
+      - infinity
+    distractors:
+      - '--keep'
+      - '-p'
+    explanation: 'sleep infinity — долгоживущий главный процесс, который ничего не делает. Флага --keep у docker run нет.'
+  - id: t7.s09.l05.t09
+    type: single_choice
+    question: 'С чего начать, если контейнер не запускается?'
+    options:
+      - 'docker ps -a и docker logs'
+      - 'Сразу переустановить Docker'
+      - 'docker system prune'
+      - 'Пересобрать образ с --no-cache'
+    correctIndex: 0
+    explanation: 'Статус с кодом выхода и логи обычно сразу называют причину. Остальные действия — стрельба наугад, а prune ещё и удалит улики.'
+  - id: t7.s09.l05.t10
+    type: fill_blank
+    prompt: 'Впиши код выхода'
+    template: 'Exited (___) — команда не найдена в образе'
+    acceptedAnswers:
+      - '127'
+    explanation: '127 — код оболочки «command not found». Обычно это опечатка в CMD или ENTRYPOINT либо программа не установлена в образ.'
+  - id: t7.s09.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь шаг отладки и его цель'
+    pairs:
+      - left: 'docker ps -a'
+        right: 'Статус и код выхода'
+      - left: 'docker logs'
+        right: 'Что сказало приложение'
+      - left: 'docker inspect'
+        right: 'Настройки и OOMKilled'
+      - left: 'docker run --rm -it --entrypoint sh'
+        right: 'Осмотреть образ изнутри'
+    explanation: 'Идём от простого к сложному: сначала факт падения, потом слова приложения, затем настройки и, наконец, ручной осмотр.'
+  - id: t7.s09.l05.t12
+    type: assemble
+    prompt: 'Собери команду: запустить nginx в фоне на свободном порту хоста 8081 (порт контейнера 80)'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '-p'
+      - '8081:80'
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '-p'
+        - '8081:80'
+        - '-d'
+        - nginx
+    distractors:
+      - '80:8081'
+      - '--force'
+    explanation: 'Слева в -p — порт хоста, его и меняют на свободный. 80:8081 перепутал бы стороны.'

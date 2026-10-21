@@ -1,0 +1,210 @@
+id: t7.s04.l03
+title: 'Bind mounts'
+theory:
+  title: 'Папка хоста внутри контейнера'
+  blocks:
+    - type: text
+      text: 'Bind mount подключает в контейнер существующую папку или файл хоста. Изменения сразу видны с обеих сторон: правишь код на хосте — контейнер видит новую версию без пересборки образа. Поэтому bind mounts любят в разработке.'
+    - type: code
+      code: |-
+        docker run -p 8080:80 -v ./site:/usr/share/nginx/html nginx
+        docker run -it --rm -v "$(pwd)":/app alpine sh
+        docker run --rm --mount type=bind,source=/srv/data,target=/data alpine ls /data
+    - type: text
+      text: 'Docker отличает bind mount от тома по левой части -v: если она начинается с / или ., это путь на хосте; иначе это имя тома. $(pwd) — команда оболочки, которая подставит текущую папку.'
+    - type: text
+      text: 'Если папки хоста нет, -v создаст её, а --mount type=bind выдаст ошибку. Ошибка полезнее: опечатка в пути не останется незамеченной.'
+    - type: text
+      text: 'Bind mount поверх непустой папки контейнера скрывает её файлы, ничего не копируя. Он зависит от структуры папок конкретного хоста, поэтому для данных в продакшене обычно выбирают тома.'
+tasks:
+  - id: t7.s04.l03.t01
+    type: single_choice
+    question: 'Что такое bind mount?'
+    options:
+      - 'Существующая папка или файл хоста, подключённые в контейнер'
+      - 'Том, который Docker создаёт в /var/lib/docker/volumes/'
+      - 'Папка в оперативной памяти'
+      - 'Копия папки хоста внутри образа'
+    correctIndex: 0
+    explanation: 'При bind mount контейнер работает прямо с файлами хоста. Копии не создаётся, поэтому изменения видны с обеих сторон.'
+  - id: t7.s04.l03.t02
+    type: true_false
+    statement: 'При bind mount файлы образа из целевой папки копируются в папку хоста.'
+    answer: false
+    explanation: 'Копирование при монтировании бывает только у пустых томов. Bind mount просто накрывает папку контейнера, и её исходные файлы становятся не видны.'
+  - id: t7.s04.l03.t03
+    type: assemble
+    prompt: 'Собери команду: nginx на порту 8080 раздаёт файлы из папки ./site хоста'
+    answer:
+      - docker
+      - run
+      - '-p'
+      - '8080:80'
+      - '-v'
+      - './site:/usr/share/nginx/html'
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '-v'
+        - './site:/usr/share/nginx/html'
+        - '-p'
+        - '8080:80'
+        - nginx
+    distractors:
+      - '/usr/share/nginx/html:./site'
+      - '--tmpfs'
+    explanation: 'nginx раздаёт файлы из /usr/share/nginx/html, поэтому папку хоста подключают туда. ./ в начале говорит Docker, что это путь, а не имя тома.'
+  - id: t7.s04.l03.t04
+    type: fill_blank
+    prompt: 'Впиши тип монтирования для папки хоста'
+    template: '--mount type=___,source=/srv/data,target=/data'
+    acceptedAnswers:
+      - bind
+    explanation: 'type=bind означает, что source — путь на хосте. Для именованного тома был бы type=volume.'
+  - id: t7.s04.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь ситуацию и поведение Docker'
+    pairs:
+      - left: 'Именованный том'
+        right: 'Docker сам решает, где хранить данные'
+      - left: 'Bind mount'
+        right: 'Ты указываешь путь на хосте'
+      - left: 'Пустой том в непустую папку'
+        right: 'Файлы образа копируются в том'
+      - left: 'Bind mount в непустую папку'
+        right: 'Файлы образа скрываются'
+    explanation: 'Главная разница — кто управляет местом хранения. С томом им управляет Docker и даже заполняет пустой том, а bind mount показывает папку хоста как есть.'
+  - id: t7.s04.l03.t06
+    type: single_choice
+    question: 'Чем bind mount удобен при разработке?'
+    options:
+      - 'Образ собирается быстрее'
+      - 'Контейнер работает без демона'
+      - 'Правки кода на хосте сразу видны в контейнере без пересборки'
+      - 'Данные автоматически отправляются в реестр'
+    correctIndex: 2
+    explanation: 'Контейнер читает файлы прямо из папки хоста. Сохранил файл в редакторе — и приложение в контейнере видит изменения.'
+  - id: t7.s04.l03.t07
+    type: true_false
+    statement: 'Если папки из --mount type=bind нет на хосте, Docker выдаст ошибку.'
+    answer: true
+    explanation: '--mount не создаёт отсутствующую папку, в отличие от -v. Так опечатка в пути сразу видна, а не превращается в пустую папку.'
+  - id: t7.s04.l03.t08
+    type: assemble
+    prompt: 'Собери команду: через --mount подключить папку хоста /srv/data в /data и вывести её содержимое в alpine'
+    answer:
+      - docker
+      - run
+      - '--rm'
+      - '--mount'
+      - 'type=bind,source=/srv/data,target=/data'
+      - alpine
+      - ls
+      - '/data'
+    altAnswers:
+      - - docker
+        - run
+        - '--mount'
+        - 'type=bind,source=/srv/data,target=/data'
+        - '--rm'
+        - alpine
+        - ls
+        - '/data'
+    distractors:
+      - 'type=volume,source=/srv/data,target=/data'
+      - '-d'
+    explanation: '/srv/data — путь на хосте, поэтому нужен type=bind. С type=volume Docker принял бы source за имя тома, а имя не может содержать /.'
+  - id: t7.s04.l03.t09
+    type: single_choice
+    question: 'Почему для данных базы в продакшене обычно выбирают том, а не bind mount?'
+    options:
+      - 'Bind mount нельзя подключить к базе данных'
+      - 'Bind mount работает только на Windows'
+      - 'Том быстрее любой папки хоста в десятки раз'
+      - 'Том не зависит от структуры папок хоста и управляется Docker'
+    correctIndex: 3
+    explanation: 'Bind mount требует, чтобы нужный путь существовал на каждом хосте и имел правильные права. Том Docker создаёт и обслуживает сам, и его легко перенести и проверить.'
+  - id: t7.s04.l03.t10
+    type: fill_blank
+    prompt: 'Впиши, как в оболочке подставить текущую папку хоста'
+    template: 'docker run --rm -v ___:/app alpine ls /app'
+    acceptedAnswers:
+      - '"$(pwd)"'
+      - '$(pwd)'
+      - '$PWD'
+      - '"$PWD"'
+      - '${PWD}'
+      - '"${PWD}"'
+      - '`pwd`'
+    explanation: '$(pwd) и $PWD оболочка заменяет на абсолютный путь текущей папки. Кавычки защищают путь, если в нём есть пробелы.'
+  - id: t7.s04.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь запись -v и вид монтирования'
+    pairs:
+      - left: '-v data:/data'
+        right: 'Именованный том data'
+      - left: '-v /srv/data:/data'
+        right: 'Bind mount по абсолютному пути'
+      - left: '-v ./data:/data'
+        right: 'Bind mount по относительному пути'
+      - left: '-v /data'
+        right: 'Анонимный том'
+    explanation: 'Docker смотрит на левую часть: путь начинается с / или . — это bind mount, просто имя — том, а если левой части нет — анонимный том.'
+  - id: t7.s04.l03.t12
+    type: assemble
+    prompt: 'Собери команду: открыть sh в alpine с текущей папкой хоста в /app и удалить контейнер после выхода'
+    answer:
+      - docker
+      - run
+      - '-it'
+      - '--rm'
+      - '-v'
+      - '"$(pwd)":/app'
+      - alpine
+      - sh
+    altAnswers:
+      - - docker
+        - run
+        - '--rm'
+        - '-it'
+        - '-v'
+        - '"$(pwd)":/app'
+        - alpine
+        - sh
+      - - docker
+        - run
+        - '-it'
+        - '-v'
+        - '"$(pwd)":/app'
+        - '--rm'
+        - alpine
+        - sh
+      - - docker
+        - run
+        - '--rm'
+        - '-v'
+        - '"$(pwd)":/app'
+        - '-it'
+        - alpine
+        - sh
+      - - docker
+        - run
+        - '-v'
+        - '"$(pwd)":/app'
+        - '-it'
+        - '--rm'
+        - alpine
+        - sh
+      - - docker
+        - run
+        - '-v'
+        - '"$(pwd)":/app'
+        - '--rm'
+        - '-it'
+        - alpine
+        - sh
+    distractors:
+      - '/app:"$(pwd)"'
+      - '-d'
+    explanation: '-it нужен для оболочки, --rm убирает контейнер после выхода, а -v подключает текущую папку хоста в /app. Порядок флагов неважен.'

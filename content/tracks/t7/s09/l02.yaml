@@ -1,0 +1,154 @@
+id: t7.s09.l02
+title: 'exec и shell внутри контейнера'
+theory:
+  title: 'Заходим внутрь'
+  blocks:
+    - type: code
+      code: |-
+        docker exec -it web sh            # оболочка
+        docker exec -it web bash          # если bash есть
+        docker exec web cat /etc/hosts
+        docker exec -u root -it web sh    # от root
+        docker exec -e DEBUG=1 web env    # с переменной
+        docker exec -w /app web ls        # в папке /app
+    - type: text
+      text: '-i держит открытым ввод, -t выделяет терминал; вместе -it дают интерактивную оболочку. В образах на alpine нет bash — используй sh. В distroless и scratch оболочки нет вообще.'
+    - type: text
+      text: 'exec работает только в запущенном контейнере. Если контейнер сразу падает, запусти образ заново со своей программой: docker run --rm -it --entrypoint sh myapp. ENTRYPOINT не выполнится, и можно спокойно осмотреться.'
+    - type: text
+      text: 'docker cp копирует файлы между хостом и контейнером, даже остановленным: docker cp web:/etc/nginx/nginx.conf . — удобно вытащить конфиг или лог.'
+    - type: text
+      text: 'Правки, сделанные через exec, живут в слое для записи и пропадут при пересоздании контейнера. Исправление нужно вносить в Dockerfile или конфигурацию.'
+tasks:
+  - id: t7.s09.l02.t01
+    type: single_choice
+    question: 'docker exec -it web bash пишет executable file not found, а sh работает. Почему?'
+    options:
+      - 'В образе нет bash'
+      - 'bash запрещён в контейнерах'
+      - 'Нужно добавить --privileged'
+      - 'Контейнер остановлен'
+    correctIndex: 0
+    explanation: 'exec запускает программу из файловой системы контейнера. В маленьких образах, например на alpine, bash не установлен, а sh есть.'
+  - id: t7.s09.l02.t02
+    type: true_false
+    statement: 'Команда exit в оболочке, открытой через docker exec, останавливает контейнер.'
+    answer: false
+    explanation: 'exec запускает дополнительный процесс. Его завершение не трогает главный процесс, и контейнер продолжает работать.'
+  - id: t7.s09.l02.t03
+    type: assemble
+    prompt: 'Собери команду: открыть оболочку sh в контейнере web от root'
+    answer:
+      - docker
+      - exec
+      - '-u'
+      - root
+      - '-it'
+      - web
+      - sh
+    altAnswers:
+      - - docker
+        - exec
+        - '-it'
+        - '-u'
+        - root
+        - web
+        - sh
+    distractors:
+      - '--root'
+      - run
+    explanation: '-u выбирает пользователя для команды, -it даёт интерактивный терминал. Флаги exec идут до имени контейнера, после него — команда.'
+  - id: t7.s09.l02.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы заменить ENTRYPOINT и осмотреть образ'
+    template: 'docker run --rm -it ___ sh myapp'
+    acceptedAnswers:
+      - '--entrypoint'
+    explanation: '--entrypoint заменяет программу из образа. Контейнер запустит sh вместо падающего приложения, и можно проверить файлы.'
+  - id: t7.s09.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker exec и его смысл'
+    pairs:
+      - left: '-i'
+        right: 'Держать ввод открытым'
+      - left: '-t'
+        right: 'Выделить терминал'
+      - left: '-u'
+        right: 'Пользователь команды'
+      - left: '-w'
+        right: 'Рабочая папка команды'
+      - left: '-e'
+        right: 'Переменная окружения'
+    explanation: 'Эти флаги настраивают только запускаемую команду. Главный процесс контейнера они не меняют.'
+  - id: t7.s09.l02.t06
+    type: single_choice
+    question: 'Контейнер падает через секунду после старта. Как осмотреть его файлы изнутри?'
+    options:
+      - 'docker exec -it app sh'
+      - 'docker run --rm -it --entrypoint sh myapp'
+      - 'docker attach app'
+      - 'docker logs -it app'
+    correctIndex: 1
+    explanation: 'exec и attach требуют работающий контейнер. Новый контейнер из того же образа с оболочкой вместо ENTRYPOINT не упадёт.'
+  - id: t7.s09.l02.t07
+    type: true_false
+    statement: 'docker cp умеет копировать файлы и из остановленного контейнера.'
+    answer: true
+    explanation: 'Файловая система остановленного контейнера сохраняется, и cp работает с ней напрямую. Это удобно, чтобы забрать лог после падения.'
+  - id: t7.s09.l02.t08
+    type: assemble
+    prompt: 'Собери команду: скопировать /etc/nginx/nginx.conf из контейнера web в текущую папку'
+    answer:
+      - docker
+      - cp
+      - 'web:/etc/nginx/nginx.conf'
+      - '.'
+    distractors:
+      - exec
+      - mv
+    explanation: 'Путь в контейнере пишут как контейнер:путь. Первым идёт источник, вторым — назначение, как у обычного cp.'
+  - id: t7.s09.l02.t09
+    type: single_choice
+    question: 'Ты поправил конфиг внутри контейнера через exec. Что будет после пересоздания контейнера из образа?'
+    options:
+      - 'Правка сохранится в образе'
+      - 'Правка пропадёт: она была только в слое для записи'
+      - 'Docker спросит, сохранить ли правку'
+      - 'Правка перейдёт в том'
+    correctIndex: 1
+    explanation: 'Новый контейнер получает чистый слой для записи поверх образа. Правку через exec годится только проверить, а сохранить её нужно в Dockerfile или конфиге.'
+  - id: t7.s09.l02.t10
+    type: fill_blank
+    prompt: 'Впиши оболочку, которая есть почти в любом образе на alpine'
+    template: 'docker exec -it web ___'
+    acceptedAnswers:
+      - sh
+      - '/bin/sh'
+    explanation: 'В alpine оболочка sh из BusyBox, а bash нужно ставить отдельно. Поэтому sh — надёжный выбор.'
+  - id: t7.s09.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь инструмент и задачу'
+    pairs:
+      - left: 'docker exec'
+        right: 'Команда в работающем контейнере'
+      - left: 'docker run --entrypoint sh'
+        right: 'Осмотреть образ, который сразу падает'
+      - left: 'docker cp'
+        right: 'Копировать файлы между хостом и контейнером'
+      - left: 'docker logs'
+        right: 'Вывод главного процесса'
+    explanation: 'Для работающего контейнера — exec, для падающего — новый контейнер с оболочкой, а cp и logs работают и с остановленным.'
+  - id: t7.s09.l02.t12
+    type: assemble
+    prompt: 'Собери команду: выполнить ls в папке /app контейнера api'
+    answer:
+      - docker
+      - exec
+      - '-w'
+      - '/app'
+      - api
+      - ls
+    distractors:
+      - cd
+      - '--dir'
+    explanation: '-w задаёт рабочую папку команды. cd — встроенная команда оболочки, а не отдельная программа, поэтому так её не запустить.'

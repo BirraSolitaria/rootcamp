@@ -1,0 +1,159 @@
+id: t7.s03.l01
+title: 'docker run: -d, -it, --name, --rm'
+theory:
+  title: 'Главные флаги docker run'
+  blocks:
+    - type: text
+      text: 'docker run создаёт контейнер из образа и запускает его. Контейнер работает, пока работает его главный процесс. По умолчанию запуск идёт на переднем плане: вывод процесса идёт в твой терминал.'
+    - type: code
+      code: |-
+        docker run -d --name web nginx   # в фоне, имя web
+        docker run -it ubuntu bash       # интерактивная оболочка
+        docker run --rm alpine echo hi   # удалить после выхода
+    - type: text
+      text: '-d (detach) запускает контейнер в фоне и печатает его ID. -i держит открытым ввод (STDIN), -t выделяет терминал (TTY). Вместе -it дают интерактивную оболочку. Выйти из неё, не останавливая контейнер: Ctrl+P, затем Ctrl+Q.'
+    - type: text
+      text: '--name задаёт имя контейнера. Имя должно быть уникальным, без него Docker придумает случайное, вроде happy_turing. --rm удаляет контейнер сразу после завершения его главного процесса.'
+    - type: text
+      text: 'Всё, что после имени образа, — команда для главного процесса. Она заменяет команду по умолчанию из образа: в docker run ubuntu echo hi вместо оболочки выполнится echo. Когда команда завершается, контейнер останавливается.'
+tasks:
+  - id: t7.s03.l01.t01
+    type: single_choice
+    question: 'Что делает флаг -d в docker run?'
+    options:
+      - 'Удаляет контейнер после завершения'
+      - 'Запускает контейнер в фоне и печатает его ID'
+      - 'Включает режим отладки'
+      - 'Скачивает образ без запуска'
+    correctIndex: 1
+    explanation: '-d — сокращение от detach, «отсоединить». Терминал сразу освобождается, а контейнер продолжает работать в фоне.'
+  - id: t7.s03.l01.t02
+    type: true_false
+    statement: 'Контейнер работает, пока работает его главный процесс.'
+    answer: true
+    explanation: 'Контейнер — это изолированный процесс. Когда главный процесс завершается, Docker переводит контейнер в состояние остановленного.'
+  - id: t7.s03.l01.t03
+    type: assemble
+    prompt: 'Собери команду: запустить nginx в фоне с именем контейнера web'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--name'
+      - web
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '--name'
+        - web
+        - '-d'
+        - nginx
+    distractors:
+      - '--hostname'
+      - '-n'
+    explanation: 'Флаги идут до имени образа, их порядок неважен. Имя контейнера задаёт --name, а --hostname меняет только имя хоста внутри контейнера.'
+  - id: t7.s03.l01.t04
+    type: fill_blank
+    prompt: 'Впиши флаги для интерактивной оболочки'
+    template: 'docker run ___ ubuntu bash'
+    acceptedAnswers:
+      - '-it'
+      - '-ti'
+      - '-i -t'
+      - '-t -i'
+      - '--interactive --tty'
+      - '--tty --interactive'
+    explanation: '-i оставляет открытым ввод, а -t выделяет терминал. Без них bash сразу завершится, потому что ему неоткуда читать команды.'
+  - id: t7.s03.l01.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker run и его смысл'
+    pairs:
+      - left: '-d'
+        right: 'Запустить в фоне'
+      - left: '-it'
+        right: 'Интерактивный терминал'
+      - left: '--name'
+        right: 'Задать своё имя контейнера'
+      - left: '--rm'
+        right: 'Удалить контейнер после выхода'
+    explanation: 'Эти четыре флага встречаются чаще всего. Их можно сочетать: например, -it --rm удобно для одноразовой оболочки.'
+  - id: t7.s03.l01.t06
+    type: single_choice
+    question: 'Ты запустил docker run -it ubuntu bash и набрал exit. Что произойдёт?'
+    options:
+      - 'Контейнер продолжит работать в фоне'
+      - 'Контейнер будет удалён'
+      - 'bash завершится, и контейнер остановится'
+      - 'Docker перезапустит bash'
+    correctIndex: 2
+    explanation: 'bash — главный процесс контейнера. Когда он завершается, останавливается и контейнер. Удалён он не будет, потому что не было --rm.'
+  - id: t7.s03.l01.t07
+    type: true_false
+    statement: 'Через --name можно дать двум существующим контейнерам одно и то же имя.'
+    answer: false
+    explanation: 'Имя однозначно определяет контейнер, поэтому оно уникально. Второй запуск с тем же именем завершится ошибкой, пока первый контейнер не удалён.'
+  - id: t7.s03.l01.t08
+    type: assemble
+    prompt: 'Собери команду: открыть bash в ubuntu и удалить контейнер после выхода'
+    answer:
+      - docker
+      - run
+      - '-it'
+      - '--rm'
+      - ubuntu
+      - bash
+    altAnswers:
+      - - docker
+        - run
+        - '--rm'
+        - '-it'
+        - ubuntu
+        - bash
+    distractors:
+      - '-d'
+      - exec
+    explanation: '-it нужен для работы с оболочкой, --rm убирает контейнер после exit. -d здесь лишний: в фоне с оболочкой не поработать.'
+  - id: t7.s03.l01.t09
+    type: single_choice
+    question: 'Как отключиться от контейнера, запущенного с -it, не останавливая его?'
+    options:
+      - 'Набрать exit'
+      - 'Нажать Ctrl+C'
+      - 'Нажать Ctrl+D'
+      - 'Нажать Ctrl+P, затем Ctrl+Q'
+    correctIndex: 3
+    explanation: 'Ctrl+P, Ctrl+Q отсоединяет терминал, а процесс продолжает работать. exit и Ctrl+D завершают оболочку, а с ней и контейнер.'
+  - id: t7.s03.l01.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы контейнер удалился после завершения'
+    template: 'docker run ___ alpine echo hi'
+    acceptedAnswers:
+      - '--rm'
+    explanation: '--rm избавляет от груды остановленных контейнеров после разовых команд: контейнер удаляется, как только echo завершится.'
+  - id: t7.s03.l01.t11
+    type: match_pairs
+    prompt: 'Сопоставь команду запуска и её результат'
+    pairs:
+      - left: 'docker run nginx'
+        right: 'Работает на переднем плане, вывод в терминал'
+      - left: 'docker run -d nginx'
+        right: 'Работает в фоне, печатает ID'
+      - left: 'docker run alpine echo hi'
+        right: 'Печатает hi, контейнер остаётся остановленным'
+      - left: 'docker run --rm alpine echo hi'
+        right: 'Печатает hi, контейнер удаляется'
+    explanation: 'nginx — долгоживущий сервер, а echo завершается сразу. Поэтому контейнеры с echo останавливаются, а --rm решает, останутся ли они в docker ps -a.'
+  - id: t7.s03.l01.t12
+    type: assemble
+    prompt: 'Собери команду: выполнить в ubuntu команду echo hello вместо команды по умолчанию'
+    answer:
+      - docker
+      - run
+      - ubuntu
+      - echo
+      - hello
+    distractors:
+      - exec
+      - '-c'
+    explanation: 'Всё после имени образа заменяет команду по умолчанию. Контейнер выведет hello и остановится, потому что echo сразу завершается.'

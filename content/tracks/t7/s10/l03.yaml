@@ -1,0 +1,175 @@
+id: t7.s10.l03
+title: 'Теги и версионирование'
+theory:
+  title: 'Понятные версии вместо latest'
+  blocks:
+    - type: text
+      text: 'Тег — изменяемая метка: его можно перевесить на другой образ. Не полагайся на latest ни в FROM, ни при деплое: сегодня и завтра это могут быть разные образы.'
+    - type: text
+      text: 'Семантическое версионирование MAJOR.MINOR.PATCH: PATCH — исправления, MINOR — новые возможности без поломок, MAJOR — несовместимые изменения. Один образ часто получает несколько тегов: 1.4.2, 1.4 и 1, и пользователь сам выбирает, насколько свежие обновления принимать.'
+    - type: code
+      code: |-
+        docker build -t myapp:1.4.2 -t myapp:1.4 .
+        docker tag myapp:1.4.2 myapp:1
+        docker tag myapp:1.4.2 registry.example.com/team/myapp:1.4.2
+        docker push registry.example.com/team/myapp:1.4.2
+    - type: text
+      text: 'docker tag не копирует образ, а добавляет ему ещё одно имя. docker push отправляет образ в реестр, указанный в начале имени (без адреса — Docker Hub).'
+    - type: text
+      text: 'Для повторяемой сборки фиксируй базовый образ точной версией, а для полной неизменности — дайджестом: FROM node:22.11.0-alpine@sha256:…. В тег удобно добавлять хеш git-коммита: myapp:1.4.2-3f9c2ab.'
+tasks:
+  - id: t7.s10.l03.t01
+    type: single_choice
+    question: 'Почему FROM node:latest плох для повторяемых сборок?'
+    options:
+      - 'latest может указывать на разные образы в разное время'
+      - 'latest всегда самый старый образ'
+      - 'latest запрещён в FROM'
+      - 'latest не скачивается из Docker Hub'
+    correctIndex: 0
+    explanation: 'Тег latest перевешивают на каждый новый выпуск. Через месяц та же строка FROM соберёт образ на другой версии Node.'
+  - id: t7.s10.l03.t02
+    type: true_false
+    statement: 'docker tag создаёт копию образа и удваивает занятое место.'
+    answer: false
+    explanation: 'Тег — лишь ещё одно имя для того же ID образа. Слои не копируются, место не растёт.'
+  - id: t7.s10.l03.t03
+    type: assemble
+    prompt: 'Собери команду: дать образу myapp:1.4.2 ещё тег myapp:1.4'
+    answer:
+      - docker
+      - tag
+      - 'myapp:1.4.2'
+      - 'myapp:1.4'
+    distractors:
+      - '-t'
+      - cp
+    explanation: 'У docker tag сначала существующий образ, затем новое имя. Флаг -t относится к docker build, а не к tag.'
+  - id: t7.s10.l03.t04
+    type: fill_blank
+    prompt: 'Впиши команду, которая отправляет образ в реестр'
+    template: 'docker ___ registry.example.com/team/myapp:1.4.2'
+    acceptedAnswers:
+      - push
+      - 'image push'
+    explanation: 'push загружает слои в реестр из начала имени. Слои, которые там уже есть, повторно не отправляются.'
+  - id: t7.s10.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь изменение версии и его смысл'
+    pairs:
+      - left: 'PATCH: 1.4.2 → 1.4.3'
+        right: 'Исправления ошибок'
+      - left: 'MINOR: 1.4 → 1.5'
+        right: 'Новые возможности без поломок'
+      - left: 'MAJOR: 1 → 2'
+        right: 'Несовместимые изменения'
+      - left: '1.4.2-3f9c2ab'
+        right: 'Версия плюс хеш коммита'
+    explanation: 'Семантическая версия сразу говорит, насколько рискованно обновление. Хеш коммита связывает образ с точным кодом.'
+  - id: t7.s10.l03.t06
+    type: single_choice
+    question: 'Ты хочешь получать только исправления ошибок, но не новые возможности. Какой тег Node подходит?'
+    options:
+      - 'node:latest'
+      - 'node:22'
+      - 'node:22.11'
+      - 'node:22.11.0@sha256:…'
+    correctIndex: 2
+    explanation: 'Тег 22.11 переезжает на 22.11.1, 22.11.2 и так далее — это только патчи. 22 принесёт и новые MINOR, а дайджест не обновится никогда.'
+  - id: t7.s10.l03.t07
+    type: true_false
+    statement: 'Один и тот же образ может одновременно иметь теги 1.4.2, 1.4 и 1.'
+    answer: true
+    explanation: 'Тегов у образа может быть сколько угодно. Когда выйдет 1.4.3, теги 1.4 и 1 перевесят на неё, а 1.4.2 останется прежним.'
+  - id: t7.s10.l03.t08
+    type: assemble
+    prompt: 'Собери команду: собрать образ из текущей папки сразу с тегами myapp:1.4.2 и myapp:1.4'
+    answer:
+      - docker
+      - build
+      - '-t'
+      - 'myapp:1.4.2'
+      - '-t'
+      - 'myapp:1.4'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:1.4.2'
+        - '.'
+        - '-t'
+        - 'myapp:1.4'
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:1.4'
+        - '-t'
+        - 'myapp:1.4.2'
+        - '.'
+      - - docker
+        - build
+        - '-t'
+        - 'myapp:1.4'
+        - '.'
+        - '-t'
+        - 'myapp:1.4.2'
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'myapp:1.4.2'
+        - '-t'
+        - 'myapp:1.4'
+      - - docker
+        - build
+        - '.'
+        - '-t'
+        - 'myapp:1.4'
+        - '-t'
+        - 'myapp:1.4.2'
+    distractors:
+      - '--tag-also'
+      - tag
+    explanation: 'Флаг -t можно повторять: образ получит все указанные имена. Флага --tag-also нет.'
+  - id: t7.s10.l03.t09
+    type: single_choice
+    question: 'Как сделать FROM полностью неизменным, даже если тег перевесят?'
+    options:
+      - 'Указать дайджест @sha256:…'
+      - 'Указать latest'
+      - 'Собирать с --no-cache'
+      - 'Взять тег в кавычки'
+    correctIndex: 0
+    explanation: 'Дайджест — хеш содержимого, его нельзя перевесить. Изменится хоть байт — изменится и дайджест.'
+  - id: t7.s10.l03.t10
+    type: fill_blank
+    prompt: 'Впиши адрес реестра из примера в теории'
+    template: 'docker tag myapp:1.4.2 ___/team/myapp:1.4.2'
+    acceptedAnswers:
+      - registry.example.com
+    explanation: 'Первая часть имени до слеша, похожая на домен, — адрес реестра. По ней docker push понимает, куда отправлять образ.'
+  - id: t7.s10.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь команду и её действие'
+    pairs:
+      - left: 'docker tag'
+        right: 'Добавить образу имя'
+      - left: 'docker push'
+        right: 'Отправить в реестр'
+      - left: 'docker pull'
+        right: 'Скачать из реестра'
+      - left: 'docker build -t'
+        right: 'Собрать и сразу назвать'
+    explanation: 'Обычный цикл выпуска: собрать с тегом, при необходимости добавить теги и отправить в реестр, откуда сервер скачает образ.'
+  - id: t7.s10.l03.t12
+    type: assemble
+    prompt: 'Собери команду: отправить myapp:1.4.2 в реестр registry.example.com в папку team'
+    answer:
+      - docker
+      - push
+      - 'registry.example.com/team/myapp:1.4.2'
+    distractors:
+      - 'myapp:1.4.2'
+      - upload
+    explanation: 'Без адреса реестра в имени push отправил бы образ в Docker Hub. Поэтому сначала образ тегируют полным именем.'

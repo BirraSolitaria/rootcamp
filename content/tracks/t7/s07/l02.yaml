@@ -1,0 +1,141 @@
+id: t7.s07.l02
+title: 'FROM … AS'
+theory:
+  title: 'Даём этапам имена'
+  blocks:
+    - type: text
+      text: 'Этапу можно дать имя: FROM образ AS имя. Имя используют в COPY --from=имя и в docker build --target имя. Без имени на этап ссылаются по номеру с нуля (--from=0), но номера сдвигаются, если вставить этап выше, поэтому имена надёжнее.'
+    - type: code
+      code: |-
+        FROM node:22 AS deps
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm ci
+
+        FROM deps AS build
+        COPY . .
+        RUN npm run build
+
+        FROM nginx:1.27-alpine AS runtime
+        COPY --from=build /app/dist /usr/share/nginx/html
+    - type: text
+      text: 'Этап может начинаться с предыдущего: FROM deps AS build берёт всё, что получилось в deps, включая WORKDIR /app, и продолжает. Имена этапов уникальны в файле и обычно пишутся строчными буквами. AS пишут в том же регистре, что FROM, иначе BuildKit выдаст предупреждение.'
+    - type: text
+      text: 'BuildKit — сборщик Docker по умолчанию начиная с версии 23 — строит граф этапов: какой этап от какого зависит. Он собирает только этапы, нужные итоговому, а независимые выполняет параллельно.'
+tasks:
+  - id: t7.s07.l02.t01
+    type: single_choice
+    question: 'Что делает AS build в строке FROM node:22 AS build?'
+    options:
+      - 'Задаёт тег итогового образа'
+      - 'Даёт этапу имя build'
+      - 'Запускает команду build'
+      - 'Создаёт контейнер с именем build'
+    correctIndex: 1
+    explanation: 'AS после образа в FROM — имя этапа. По нему потом ссылаются COPY --from=build и --target build; на тег образа оно не влияет.'
+  - id: t7.s07.l02.t02
+    type: true_false
+    statement: 'Без имени на этап можно сослаться по номеру, и первый этап имеет номер 1.'
+    answer: false
+    explanation: 'Этапы нумеруются с нуля: первый — 0, второй — 1. Номера неудобны тем, что сдвигаются при добавлении этапов выше.'
+  - id: t7.s07.l02.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: этап build на образе node:22'
+    answer:
+      - 'FROM'
+      - 'node:22'
+      - 'AS'
+      - build
+    distractors:
+      - '--name'
+      - '='
+    explanation: 'Имя этапа пишется после AS через пробел. Ни --name, ни знак = в FROM для этого не используются.'
+  - id: t7.s07.l02.t04
+    type: fill_blank
+    prompt: 'Впиши ключевое слово, которое даёт этапу имя'
+    template: 'FROM golang:1.23 ___ builder'
+    acceptedAnswers:
+      - 'AS'
+    explanation: 'AS связывает этап с именем builder. Дальше можно писать COPY --from=builder вместо номера этапа.'
+  - id: t7.s07.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь строку Dockerfile и её смысл'
+    pairs:
+      - left: 'FROM node:22 AS deps'
+        right: 'Новый этап deps на образе node:22'
+      - left: 'FROM deps AS build'
+        right: 'Этап build продолжает этап deps'
+      - left: 'FROM nginx:1.27-alpine'
+        right: 'Безымянный этап на образе nginx'
+      - left: 'COPY --from=build'
+        right: 'Взять файлы из этапа build'
+    explanation: 'После FROM можно указать как образ из реестра, так и имя прошлого этапа. Имя после AS делает этап доступным для ссылок.'
+  - id: t7.s07.l02.t06
+    type: single_choice
+    question: 'Почему имена этапов удобнее номеров?'
+    options:
+      - 'Номера сдвигаются, если добавить этап выше'
+      - 'Номера работают только в старом сборщике'
+      - 'Имена ускоряют сборку'
+      - 'По номерам нельзя копировать файлы'
+    correctIndex: 0
+    explanation: '--from=1 начнёт указывать на другой этап, если вставить новый FROM выше. Имя build останется именем build, где бы этап ни стоял.'
+  - id: t7.s07.l02.t07
+    type: true_false
+    statement: 'В примере из теории этап build наследует WORKDIR /app от этапа deps.'
+    answer: true
+    explanation: 'FROM deps начинает этап с результата deps, включая файлы и настройки образа, например WORKDIR. Поэтому COPY . . кладёт файлы в /app.'
+  - id: t7.s07.l02.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: этап test продолжает этап build'
+    answer:
+      - 'FROM'
+      - build
+      - 'AS'
+      - test
+    distractors:
+      - 'COPY'
+      - '--from=build'
+    explanation: 'Чтобы продолжить этап, его имя ставят после FROM вместо образа. COPY --from копирует отдельные файлы, а не продолжает этап целиком.'
+  - id: t7.s07.l02.t09
+    type: single_choice
+    question: 'Этап lint не нужен ни одному этапу, от которых зависит последний. Что сделает BuildKit при обычном docker build?'
+    options:
+      - 'Соберёт все этапы по порядку'
+      - 'Пропустит lint и соберёт только нужные этапы'
+      - 'Соберёт только первый этап'
+      - 'Выдаст ошибку о лишнем этапе'
+    correctIndex: 1
+    explanation: 'BuildKit идёт по графу зависимостей от итогового этапа и пропускает то, что ему не нужно. Старый сборщик собирал все этапы подряд.'
+  - id: t7.s07.l02.t10
+    type: fill_blank
+    prompt: 'Впиши номер первого этапа, чтобы скопировать из него файл'
+    template: 'COPY --from=___ /bin/app /app'
+    acceptedAnswers:
+      - '0'
+    explanation: 'Нумерация этапов начинается с нуля. Такая ссылка работает, но лучше дать этапу имя: номер сломается при перестановке.'
+  - id: t7.s07.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь понятие и описание'
+    pairs:
+      - left: 'Имя этапа'
+        right: 'Метка после AS'
+      - left: 'Номер этапа'
+        right: 'Порядковый индекс FROM с нуля'
+      - left: 'BuildKit'
+        right: 'Сборщик Docker по умолчанию'
+      - left: 'Граф этапов'
+        right: 'Связи: какой этап от какого зависит'
+    explanation: 'BuildKit использует имена и номера, чтобы построить граф этапов, и по нему решает, что собирать и что можно делать параллельно.'
+  - id: t7.s07.l02.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: этап runtime на образе nginx:1.27-alpine'
+    answer:
+      - 'FROM'
+      - 'nginx:1.27-alpine'
+      - 'AS'
+      - runtime
+    distractors:
+      - 'RUN'
+      - '--target'
+    explanation: 'Последний этап тоже можно назвать: так понятнее, и на него удобно ссылаться через --target runtime.'

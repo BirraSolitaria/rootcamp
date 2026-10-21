@@ -1,0 +1,139 @@
+id: t7.s02.l04
+title: 'docker image ls и docker rmi'
+theory:
+  title: 'Список и удаление образов'
+  blocks:
+    - type: text
+      text: 'docker image ls (короткая форма docker images) показывает локальные образы: имя, тег, ID и размер. Можно указать имя: docker image ls nginx.'
+    - type: code
+      code: |-
+        docker image ls -q                       # только ID
+        docker image ls --filter dangling=true   # висячие
+        docker image rm nginx:1.27               # = docker rmi
+        docker image prune      # удалить висячие
+        docker image prune -a   # все неиспользуемые
+    - type: text
+      text: 'Висячий (dangling) образ — образ без имени и тега, показывается как <none>. Он появляется, когда тег переходит к новой сборке, а старая остаётся без имени.'
+    - type: text
+      text: 'docker rmi удаляет только локальный образ, реестр он не трогает. Если у образа несколько тегов, rmi по одному тегу снимает только его (Untagged). Сам образ удаляется, когда снят последний тег.'
+    - type: text
+      text: 'Образ, из которого создан контейнер, даже остановленный, без флага -f удалить нельзя: сначала удали контейнер через docker rm. prune -a удаляет все образы, которые не использует ни один контейнер.'
+tasks:
+  - id: t7.s02.l04.t01
+    type: single_choice
+    question: 'Что делает docker images?'
+    options:
+      - 'Скачивает все образы из Docker Hub'
+      - 'Показывает работающие контейнеры'
+      - 'Удаляет неиспользуемые образы'
+      - 'Показывает список локальных образов, как docker image ls'
+    correctIndex: 3
+    explanation: 'docker images — короткая форма docker image ls. Обе выводят образы, которые уже лежат в локальном хранилище.'
+  - id: t7.s02.l04.t02
+    type: true_false
+    statement: 'docker rmi nginx удаляет образ nginx из Docker Hub.'
+    answer: false
+    explanation: 'docker rmi работает только с локальным хранилищем демона. Реестр не меняется, и образ можно снова скачать через docker pull.'
+  - id: t7.s02.l04.t03
+    type: assemble
+    prompt: 'Собери полную форму команды: удалить локальный образ nginx:1.27'
+    answer:
+      - docker
+      - image
+      - rm
+      - 'nginx:1.27'
+    distractors:
+      - delete
+      - prune
+    explanation: 'Полная форма «объект — действие»: image rm. Короткая форма той же команды — docker rmi nginx:1.27.'
+  - id: t7.s02.l04.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, чтобы вывести только ID образов'
+    template: 'docker image ls ___'
+    acceptedAnswers:
+      - '-q'
+      - '--quiet'
+    explanation: '-q (quiet) оставляет только ID. Это удобно передавать в другие команды, например в docker rmi.'
+  - id: t7.s02.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду и что она делает с образами'
+    pairs:
+      - left: 'docker image ls'
+        right: 'Показывает список образов'
+      - left: 'docker rmi alpine'
+        right: 'Удаляет образ alpine:latest'
+      - left: 'docker image prune'
+        right: 'Удаляет только висячие образы'
+      - left: 'docker image prune -a'
+        right: 'Удаляет все образы без контейнеров'
+    explanation: 'rmi удаляет конкретный образ, prune — сразу группу. Без -a prune трогает только висячие образы, а с -a ещё и все, которые не использует ни один контейнер.'
+  - id: t7.s02.l04.t06
+    type: single_choice
+    question: 'docker rmi nginx выдаёт ошибку «container … is using its referenced image». Что сделать?'
+    options:
+      - 'Перезапустить демон Docker'
+      - 'Сначала удалить этот контейнер через docker rm'
+      - 'Выполнить docker pull nginx'
+      - 'Подождать, пока контейнер завершится'
+    correctIndex: 1
+    explanation: 'Остановленный контейнер всё ещё опирается на слои образа. Когда контейнер удалён, образ больше никто не использует, и rmi сработает.'
+  - id: t7.s02.l04.t07
+    type: true_false
+    statement: 'Если у образа два тега, docker rmi по одному из них снимет только этот тег, а образ останется.'
+    answer: true
+    explanation: 'Тег — лишь имя образа. Docker пишет «Untagged» и удаляет данные только тогда, когда снят последний тег.'
+  - id: t7.s02.l04.t08
+    type: assemble
+    prompt: 'Собери команду: показать только висячие образы'
+    answer:
+      - docker
+      - image
+      - ls
+      - '--filter'
+      - 'dangling=true'
+    distractors:
+      - rm
+      - '--tag'
+    explanation: '--filter dangling=true оставляет в списке только образы без имени и тега, которые показываются как <none>.'
+  - id: t7.s02.l04.t09
+    type: single_choice
+    question: 'Что такое висячий (dangling) образ?'
+    options:
+      - 'Образ без имени и тега, показывается как <none>'
+      - 'Образ, скачанный не до конца'
+      - 'Образ, у которого работает контейнер'
+      - 'Образ из чужого реестра'
+    correctIndex: 0
+    explanation: 'Когда тег переходит к новой сборке, старый образ остаётся без имени. Такие образы занимают место, и их удаляет docker image prune.'
+  - id: t7.s02.l04.t10
+    type: fill_blank
+    prompt: 'Впиши объект команды'
+    template: 'docker ___ prune   # удалить только висячие образы'
+    acceptedAnswers:
+      - image
+    explanation: 'docker image prune без флагов удаляет только висячие образы. Объект image ограничивает уборку образами.'
+  - id: t7.s02.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker image ls и его действие'
+    pairs:
+      - left: '-q'
+        right: 'Только ID образов'
+      - left: '--filter dangling=true'
+        right: 'Только висячие образы'
+      - left: '--no-trunc'
+        right: 'Полные, не обрезанные ID'
+      - left: '--format'
+        right: 'Вывод по своему шаблону'
+    explanation: 'Флаги меняют вид списка: -q удобен для скриптов, фильтр сужает список, --no-trunc отключает сокращение, а --format задаёт шаблон Go, как у docker info.'
+  - id: t7.s02.l04.t12
+    type: assemble
+    prompt: 'Собери команду: удалить все образы, которые не использует ни один контейнер'
+    answer:
+      - docker
+      - image
+      - prune
+      - '-a'
+    distractors:
+      - '--volumes'
+      - rm
+    explanation: 'Без -a prune удаляет только висячие образы. С -a уходят все образы без контейнеров, даже с тегами, поэтому их потом придётся скачать заново.'

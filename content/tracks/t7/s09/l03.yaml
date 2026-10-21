@@ -1,0 +1,167 @@
+id: t7.s09.l03
+title: 'inspect и коды выхода'
+theory:
+  title: 'Почему контейнер завершился'
+  blocks:
+    - type: code
+      code: |-
+        docker inspect -f '{{.State.ExitCode}}' app
+        docker inspect -f '{{.State.OOMKilled}}' app
+        docker inspect -f '{{json .State}}' app
+        docker inspect -f '{{.RestartCount}}' app
+    - type: text
+      text: '-f — короткая форма --format. {{json .State}} выводит весь блок состояния: Status, ExitCode, Error, StartedAt, FinishedAt, OOMKilled. docker ps -a тоже показывает код: Exited (137).'
+    - type: text
+      text: |-
+        Код выхода главного процесса — главная подсказка:
+        0 — завершился штатно;
+        1 — ошибка приложения;
+        125 — ошибка самого docker run (неверный флаг);
+        126 — команда найдена, но не запускается (нет прав);
+        127 — команда не найдена;
+        137 = 128+9 — убит SIGKILL: docker kill, нехватка памяти или docker stop по таймауту;
+        143 = 128+15 — завершён по SIGTERM.
+    - type: text
+      text: 'Код больше 128 означает «убит сигналом номер код−128». OOMKilled = true значит, что ядро убило процесс за превышение лимита памяти (-m). RestartCount показывает, сколько раз Docker перезапускал контейнер.'
+tasks:
+  - id: t7.s09.l03.t01
+    type: single_choice
+    question: 'Контейнер в статусе Exited (127). Что вероятнее всего случилось?'
+    options:
+      - 'Не хватило памяти'
+      - 'Команда не найдена в образе'
+      - 'Контейнер остановили docker stop'
+      - 'Приложение завершилось успешно'
+    correctIndex: 1
+    explanation: '127 — стандартный код оболочки «команда не найдена». Проверь CMD или ENTRYPOINT: возможно, опечатка или программа не установлена.'
+  - id: t7.s09.l03.t02
+    type: true_false
+    statement: 'Код выхода 137 означает, что процесс был убит сигналом SIGKILL.'
+    answer: true
+    explanation: '137 − 128 = 9, а сигнал 9 — SIGKILL. Его посылают docker kill, ядро при нехватке памяти и docker stop, когда истёк таймаут.'
+  - id: t7.s09.l03.t03
+    type: assemble
+    prompt: 'Собери команду: вывести код выхода контейнера app'
+    answer:
+      - docker
+      - inspect
+      - '-f'
+      - "'{{.State.ExitCode}}'"
+      - app
+    altAnswers:
+      - - docker
+        - inspect
+        - app
+        - '-f'
+        - "'{{.State.ExitCode}}'"
+    distractors:
+      - "'{{.ExitCode}}'"
+      - logs
+    explanation: 'Поле ExitCode лежит внутри State, поэтому путь .State.ExitCode. Без .State шаблон не найдёт поле.'
+  - id: t7.s09.l03.t04
+    type: fill_blank
+    prompt: 'Впиши поле, которое показывает, убило ли ядро процесс за нехватку памяти'
+    template: "docker inspect -f '{{.State.___}}' app"
+    acceptedAnswers:
+      - 'OOMKilled'
+    explanation: 'OOM — out of memory. Если поле равно true, процесс превысил лимит памяти и был убит ядром, а код выхода обычно 137.'
+  - id: t7.s09.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь код выхода и его смысл'
+    pairs:
+      - left: '0'
+        right: 'Штатное завершение'
+      - left: '1'
+        right: 'Ошибка приложения'
+      - left: '127'
+        right: 'Команда не найдена'
+      - left: '137'
+        right: 'Убит SIGKILL'
+      - left: '143'
+        right: 'Завершён по SIGTERM'
+    explanation: 'Коды до 128 сообщает сама программа или оболочка, а коды выше 128 говорят, каким сигналом процесс был убит.'
+  - id: t7.s09.l03.t06
+    type: single_choice
+    question: 'Контейнер завершился с кодом 130. Какой номер сигнала его остановил?'
+    options:
+      - '2'
+      - '130'
+      - '13'
+      - '128'
+    correctIndex: 0
+    explanation: 'Код выше 128 — это 128 плюс номер сигнала: 130 − 128 = 2. Сигнал 2 — SIGINT, его посылает Ctrl+C.'
+  - id: t7.s09.l03.t07
+    type: true_false
+    statement: 'Код выхода 125 означает, что ошибка произошла в самом приложении внутри контейнера.'
+    answer: false
+    explanation: '125 сообщает об ошибке самого docker run, например неверном флаге. До запуска приложения дело не дошло.'
+  - id: t7.s09.l03.t08
+    type: assemble
+    prompt: 'Собери команду: вывести весь блок State контейнера app в JSON'
+    answer:
+      - docker
+      - inspect
+      - '-f'
+      - "'{{json .State}}'"
+      - app
+    altAnswers:
+      - - docker
+        - inspect
+        - app
+        - '-f'
+        - "'{{json .State}}'"
+    distractors:
+      - logs
+      - '--json'
+    explanation: 'Функция json в шаблоне печатает объект целиком в JSON. Так за один раз видно статус, код выхода, время и OOMKilled.'
+  - id: t7.s09.l03.t09
+    type: single_choice
+    question: 'У контейнера OOMKilled = true и код 137. Что поможет?'
+    options:
+      - 'Увеличить лимит памяти -m или уменьшить потребление приложения'
+      - 'Поменять опубликованный порт'
+      - 'Добавить флаг --rm'
+      - 'Перезапустить демон Docker'
+    correctIndex: 0
+    explanation: 'Процесс убит за превышение лимита памяти. Помогает только больше памяти или меньший аппетит приложения.'
+  - id: t7.s09.l03.t10
+    type: fill_blank
+    prompt: 'Впиши номер сигнала'
+    template: 'Код выхода 137 = 128 + ___'
+    acceptedAnswers:
+      - '9'
+    explanation: 'Сигнал 9 — SIGKILL, его нельзя перехватить. Поэтому процесс не успевает ничего записать и просто исчезает.'
+  - id: t7.s09.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь поле inspect и его смысл'
+    pairs:
+      - left: '.State.Status'
+        right: 'Состояние: running, exited…'
+      - left: '.State.ExitCode'
+        right: 'Код выхода'
+      - left: '.State.OOMKilled'
+        right: 'Убит ли за нехватку памяти'
+      - left: '.RestartCount'
+        right: 'Сколько раз перезапускался'
+      - left: '.State.FinishedAt'
+        right: 'Когда завершился'
+    explanation: 'Эти поля вместе отвечают на вопрос «что случилось»: когда процесс упал, с каким кодом и не из-за памяти ли.'
+  - id: t7.s09.l03.t12
+    type: assemble
+    prompt: 'Собери команду: вывести, сколько раз перезапускался контейнер app'
+    answer:
+      - docker
+      - inspect
+      - '-f'
+      - "'{{.RestartCount}}'"
+      - app
+    altAnswers:
+      - - docker
+        - inspect
+        - app
+        - '-f'
+        - "'{{.RestartCount}}'"
+    distractors:
+      - "'{{.State.Restarts}}'"
+      - stats
+    explanation: 'RestartCount лежит на верхнем уровне, а не в State. Растущее значение — признак контейнера, который падает по кругу.'

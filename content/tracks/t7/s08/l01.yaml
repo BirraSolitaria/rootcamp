@@ -1,0 +1,151 @@
+id: t7.s08.l01
+title: 'Структура compose.yaml'
+theory:
+  title: 'Весь проект в одном файле'
+  blocks:
+    - type: text
+      text: 'Docker Compose описывает несколько контейнеров в одном YAML-файле и управляет ими одной командой. Сейчас это плагин Docker CLI: docker compose через пробел (Compose v2). Старая утилита docker-compose через дефис устарела и не поддерживается.'
+    - type: code
+      code: |-
+        # compose.yaml
+        name: shop
+        services:
+          web:
+            image: nginx:1.27
+          db:
+            image: postgres:16
+        volumes:
+          dbdata:
+    - type: text
+      text: 'Файл по умолчанию — compose.yaml (подходят и compose.yml, docker-compose.yaml). Верхние ключи: services — контейнеры приложения (сервисы), volumes и networks — именованные тома и сети, name — имя проекта. Поле version устарело: Compose v2 его игнорирует и предупреждает.'
+    - type: text
+      text: 'YAML: вложенность — отступы пробелами (табуляция запрещена), «ключ: значение», элемент списка начинается с «- », # — комментарий.'
+    - type: text
+      text: 'Проект — всё, что описано в файле. Имя берётся из name, а без него — из имени папки. Compose создаёт сеть проект_default, и сервисы находят друг друга по имени сервиса: web обращается к базе по адресу db.'
+    - type: code
+      code: |-
+        docker compose up -d              # запустить всё в фоне
+        docker compose -f prod.yaml up -d  # другой файл
+        docker compose down                # остановить и удалить
+tasks:
+  - id: t7.s08.l01.t01
+    type: single_choice
+    question: 'Как вызывается Compose v2 — плагин Docker CLI?'
+    options:
+      - 'docker-compose up'
+      - 'docker compose up'
+      - 'compose-docker up'
+      - 'docker up compose'
+    correctIndex: 1
+    explanation: 'Compose v2 встроен в Docker CLI как подкоманда, поэтому пишется через пробел. docker-compose через дефис — устаревшая отдельная утилита v1.'
+  - id: t7.s08.l01.t02
+    type: true_false
+    statement: 'Поле version в compose.yaml обязательно для Compose v2.'
+    answer: false
+    explanation: 'Compose v2 сам знает актуальную спецификацию и игнорирует version, выводя предупреждение. Новые файлы пишут без него.'
+  - id: t7.s08.l01.t03
+    type: assemble
+    prompt: 'Собери команду: запустить проект из compose.yaml в фоне'
+    answer:
+      - docker
+      - compose
+      - up
+      - '-d'
+    distractors:
+      - run
+      - start
+    explanation: 'up создаёт сеть, тома и контейнеры и запускает их, а -d отпускает терминал. start только запускает уже созданные контейнеры.'
+  - id: t7.s08.l01.t04
+    type: fill_blank
+    prompt: 'Впиши имя файла Compose по умолчанию'
+    template: 'Файл проекта: ___'
+    acceptedAnswers:
+      - compose.yaml
+      - compose.yml
+    explanation: 'Compose по умолчанию ищет compose.yaml (или compose.yml); старое имя docker-compose.yml он понимает лишь ради совместимости. Для другого имени нужен флаг -f.'
+  - id: t7.s08.l01.t05
+    type: match_pairs
+    prompt: 'Сопоставь верхний ключ compose.yaml и его смысл'
+    pairs:
+      - left: services
+        right: 'Контейнеры приложения'
+      - left: volumes
+        right: 'Именованные тома'
+      - left: networks
+        right: 'Сети проекта'
+      - left: name
+        right: 'Имя проекта'
+    explanation: 'Главный ключ — services, остальные описывают общие ресурсы проекта, которые сервисы могут использовать.'
+  - id: t7.s08.l01.t06
+    type: single_choice
+    question: 'Проект лежит в папке shop, поля name нет. Как будет называться сеть по умолчанию?'
+    options:
+      - default
+      - shop_default
+      - compose_default
+      - bridge
+    correctIndex: 1
+    explanation: 'Без name имя проекта берётся из папки, а сеть по умолчанию получает имя проект_default. В ней сервисы видят друг друга по именам.'
+  - id: t7.s08.l01.t07
+    type: true_false
+    statement: 'В compose.yaml отступы можно делать табуляцией.'
+    answer: false
+    explanation: 'YAML запрещает табуляцию в отступах, и файл не разберётся. Используй пробелы, обычно по два на уровень.'
+  - id: t7.s08.l01.t08
+    type: assemble
+    prompt: 'Собери команду: запустить в фоне проект из файла prod.yaml'
+    answer:
+      - docker
+      - compose
+      - '-f'
+      - prod.yaml
+      - up
+      - '-d'
+    distractors:
+      - build
+      - '-p'
+    explanation: '-f — флаг самого docker compose, поэтому стоит до подкоманды up. -p задал бы имя проекта, а не файл.'
+  - id: t7.s08.l01.t09
+    type: single_choice
+    question: 'Как сервис web обратится к PostgreSQL из сервиса db того же проекта?'
+    options:
+      - 'По адресу localhost:5432'
+      - 'По адресу db:5432'
+      - 'По адресу shop_db:5432'
+      - 'Только через опубликованный порт хоста'
+    correctIndex: 1
+    explanation: 'Сервисы проекта сидят в одной сети, и встроенный DNS Docker отвечает на имя сервиса. localhost внутри web — это сам web.'
+  - id: t7.s08.l01.t10
+    type: fill_blank
+    prompt: 'Впиши верхний ключ, под которым описывают контейнеры'
+    template: |-
+      ___:
+        web:
+          image: nginx:1.27
+    acceptedAnswers:
+      - services
+    explanation: 'Каждый ключ внутри services — один сервис: из его описания Compose создаёт контейнер.'
+  - id: t7.s08.l01.t11
+    type: match_pairs
+    prompt: 'Сопоставь запись YAML и её смысл'
+    pairs:
+      - left: 'Отступ пробелами'
+        right: 'Вложенность'
+      - left: 'ключ: значение'
+        right: 'Пара настройки'
+      - left: '- элемент'
+        right: 'Элемент списка'
+      - left: '# текст'
+        right: 'Комментарий'
+    explanation: 'В YAML структуру задают отступы, поэтому сдвиг на один пробел меняет смысл файла.'
+  - id: t7.s08.l01.t12
+    type: assemble
+    prompt: 'Собери команду: остановить проект и удалить его контейнеры и сеть'
+    answer:
+      - docker
+      - compose
+      - down
+    distractors:
+      - stop
+      - rm
+    explanation: 'down убирает всё, что создал up, кроме именованных томов. stop только останавливает, а rm удаляет лишь остановленные контейнеры.'

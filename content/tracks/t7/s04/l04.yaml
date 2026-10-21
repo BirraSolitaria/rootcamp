@@ -1,0 +1,191 @@
+id: t7.s04.l04
+title: 'tmpfs и монтирование только для чтения'
+theory:
+  title: 'Память и защита от записи'
+  blocks:
+    - type: text
+      text: 'tmpfs-монтирование хранит данные только в оперативной памяти хоста и никогда не пишет их на диск. При остановке контейнера они исчезают. Подходит для временных файлов и секретов, которые не должны попасть на диск. Работает только с Linux-контейнерами и не делится между контейнерами.'
+    - type: code
+      code: |-
+        docker run -d --tmpfs /tmp myapp
+        docker run -d --mount type=tmpfs,target=/cache,tmpfs-size=64m myapp
+    - type: text
+      text: 'Монтирование только для чтения запрещает контейнеру менять файлы. Для -v добавь :ro, для --mount — ключ readonly (или ro). Попытка записи даст ошибку «Read-only file system».'
+    - type: code
+      code: |-
+        docker run -d -v config:/etc/app:ro myapp
+        docker run -d --mount type=volume,source=cfg,target=/etc/app,readonly myapp
+    - type: text
+      text: '--read-only делает только для чтения всю корневую файловую систему контейнера. Если приложению нужно где-то писать временные файлы, добавь --tmpfs /tmp. Так взломанный процесс не сможет подменить файлы.'
+tasks:
+  - id: t7.s04.l04.t01
+    type: single_choice
+    question: 'Где хранятся данные tmpfs-монтирования?'
+    options:
+      - 'В томе в /var/lib/docker/volumes/'
+      - 'В папке /tmp на диске хоста'
+      - 'В оперативной памяти хоста'
+      - 'В слое для записи контейнера'
+    correctIndex: 2
+    explanation: 'tmpfs — файловая система в памяти. Данные не попадают на диск, поэтому работают быстро и не остаются после остановки контейнера.'
+  - id: t7.s04.l04.t02
+    type: true_false
+    statement: 'Данные в tmpfs сохраняются после остановки и повторного запуска контейнера.'
+    answer: false
+    explanation: 'tmpfs живёт в памяти, пока работает контейнер. После остановки содержимое теряется, и при docker start монтирование снова пустое.'
+  - id: t7.s04.l04.t03
+    type: assemble
+    prompt: 'Собери команду: запустить myapp в фоне с папкой /tmp в оперативной памяти'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--tmpfs'
+      - '/tmp'
+      - myapp
+    altAnswers:
+      - - docker
+        - run
+        - '--tmpfs'
+        - '/tmp'
+        - '-d'
+        - myapp
+    distractors:
+      - '-v'
+      - '/tmp:/tmp'
+    explanation: '--tmpfs принимает только путь в контейнере, источник ему не нужен. Вариант -v /tmp:/tmp подключил бы папку /tmp хоста, а не память.'
+  - id: t7.s04.l04.t04
+    type: fill_blank
+    prompt: 'Впиши опцию, чтобы том подключился только для чтения'
+    template: 'docker run -d -v config:/etc/app:___ myapp'
+    acceptedAnswers:
+      - ro
+    explanation: 'ro — read-only. Приложение сможет читать конфигурацию, но любая попытка записи завершится ошибкой.'
+  - id: t7.s04.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг и его эффект'
+    pairs:
+      - left: '--tmpfs /tmp'
+        right: 'Папка /tmp в оперативной памяти'
+      - left: '-v data:/data:ro'
+        right: 'Том только для чтения'
+      - left: '--read-only'
+        right: 'Вся корневая ФС только для чтения'
+      - left: 'tmpfs-size=64m'
+        right: 'Лимит размера tmpfs 64 МБ'
+    explanation: 'tmpfs отвечает за временные данные в памяти, а ro и --read-only — за защиту от записи. Вместе они делают контейнер почти неизменяемым.'
+  - id: t7.s04.l04.t06
+    type: single_choice
+    question: 'Зачем подключать конфигурацию только для чтения?'
+    options:
+      - 'Чтобы процесс в контейнере не мог её изменить, даже если его взломают'
+      - 'Чтобы конфигурация читалась быстрее'
+      - 'Чтобы конфигурация попала в образ'
+      - 'Чтобы Docker не удалил её при docker rm'
+    correctIndex: 0
+    explanation: 'Принцип наименьших прав: приложению нужно только читать настройки. Запрет записи ограничивает ущерб от ошибки или взлома.'
+  - id: t7.s04.l04.t07
+    type: true_false
+    statement: 'Попытка записать файл в папку, подключённую с :ro, завершится ошибкой.'
+    answer: true
+    explanation: 'Монтирование с ro запрещено для записи на уровне ядра. Программа получит ошибку «Read-only file system».'
+  - id: t7.s04.l04.t08
+    type: assemble
+    prompt: 'Собери команду: myapp в фоне с корневой ФС только для чтения и записываемой /tmp в памяти'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--read-only'
+      - '--tmpfs'
+      - '/tmp'
+      - myapp
+    altAnswers:
+      - - docker
+        - run
+        - '--read-only'
+        - '-d'
+        - '--tmpfs'
+        - '/tmp'
+        - myapp
+      - - docker
+        - run
+        - '-d'
+        - '--tmpfs'
+        - '/tmp'
+        - '--read-only'
+        - myapp
+      - - docker
+        - run
+        - '--read-only'
+        - '--tmpfs'
+        - '/tmp'
+        - '-d'
+        - myapp
+      - - docker
+        - run
+        - '--tmpfs'
+        - '/tmp'
+        - '-d'
+        - '--read-only'
+        - myapp
+      - - docker
+        - run
+        - '--tmpfs'
+        - '/tmp'
+        - '--read-only'
+        - '-d'
+        - myapp
+    distractors:
+      - '-ro'
+      - '/tmp:ro'
+    explanation: '--read-only защищает всю файловую систему контейнера, а --tmpfs /tmp оставляет место для временных файлов. Флага -ro у docker run нет.'
+  - id: t7.s04.l04.t09
+    type: single_choice
+    question: 'Для каких данных лучше всего подходит tmpfs?'
+    options:
+      - 'Для файлов базы данных'
+      - 'Для исходного кода при разработке'
+      - 'Для общих файлов нескольких контейнеров'
+      - 'Для временных и секретных данных, которые не должны попасть на диск'
+    correctIndex: 3
+    explanation: 'tmpfs не сохраняет данные и не пишет их на диск. Это плюс для временных файлов и секретов и минус для всего, что нужно хранить.'
+  - id: t7.s04.l04.t10
+    type: fill_blank
+    prompt: 'Впиши ключ, ограничивающий размер tmpfs'
+    template: '--mount type=tmpfs,target=/cache,___=64m'
+    acceptedAnswers:
+      - 'tmpfs-size'
+    explanation: 'tmpfs-size задаёт предел размера. Без него tmpfs может занять много памяти хоста, если приложение пишет слишком много.'
+  - id: t7.s04.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь вид монтирования и место хранения данных'
+    pairs:
+      - left: 'Том'
+        right: 'Каталог Docker на диске хоста'
+      - left: 'Bind mount'
+        right: 'Выбранная тобой папка хоста'
+      - left: tmpfs
+        right: 'Оперативная память хоста'
+    explanation: 'Тома и bind mounts пишут на диск и сохраняют данные. tmpfs держит их только в памяти до остановки контейнера.'
+  - id: t7.s04.l04.t12
+    type: assemble
+    prompt: 'Собери команду: подключить том cfg в /etc/app только для чтения через --mount'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--mount'
+      - 'type=volume,source=cfg,target=/etc/app,readonly'
+      - myapp
+    altAnswers:
+      - - docker
+        - run
+        - '--mount'
+        - 'type=volume,source=cfg,target=/etc/app,readonly'
+        - '-d'
+        - myapp
+    distractors:
+      - ':ro'
+      - '-v'
+    explanation: 'В --mount защита от записи — отдельный ключ readonly (или ro) в списке через запятую. Суффикс :ro через двоеточие — это синтаксис -v.'

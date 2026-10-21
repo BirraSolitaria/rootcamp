@@ -1,0 +1,152 @@
+id: t7.s10.l04
+title: 'Секреты не в образе'
+theory:
+  title: 'Пароли — только во время работы'
+  blocks:
+    - type: text
+      text: 'Всё, что попало в слой, остаётся в образе навсегда: файл, удалённый следующей инструкцией, можно достать из старого слоя. ENV виден в docker image inspect, а значения ENV и ARG — в docker history. Поэтому пароли, токены и ключи не передают через COPY, ENV или ARG.'
+    - type: text
+      text: 'Секрет на время сборки — BuildKit secret mount: файл доступен только в одном RUN по пути /run/secrets/id и не записывается в слой.'
+    - type: code
+      code: |-
+        RUN --mount=type=secret,id=npm_token \
+            NPM_TOKEN=$(cat /run/secrets/npm_token) npm ci
+
+        docker build --secret id=npm_token,src=./npm_token.txt .
+    - type: text
+      text: 'Секреты для работы передают при запуске. -e и --env-file просты, но значения видны в docker inspect. Надёжнее секреты Compose: файл монтируется в /run/secrets/. Многие официальные образы читают пароль из файла через переменную *_FILE.'
+    - type: code
+      code: |-
+        services:
+          db:
+            image: postgres:16
+            environment:
+              POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+            secrets: [db_password]
+        secrets:
+          db_password:
+            file: ./db_password.txt
+    - type: text
+      text: 'Файлы .env и ключи добавь в .dockerignore и .gitignore.'
+tasks:
+  - id: t7.s10.l04.t01
+    type: single_choice
+    question: 'Где секрет точно не стоит хранить?'
+    options:
+      - 'В ENV в Dockerfile'
+      - 'В секрете Compose'
+      - 'В BuildKit secret mount'
+      - 'В файле, смонтированном при запуске'
+    correctIndex: 0
+    explanation: 'ENV записывается в метаданные образа, и пароль увидит любой, кто скачает образ. Остальные способы передают секрет, не сохраняя его в образе.'
+  - id: t7.s10.l04.t02
+    type: true_false
+    statement: 'Если скопировать ключ через COPY, а следующим RUN удалить, ключа в образе не останется.'
+    answer: false
+    explanation: 'COPY уже записал ключ в свой слой. Удаление лишь скрывает его в следующем слое, а достать файл из старого слоя несложно.'
+  - id: t7.s10.l04.t03
+    type: assemble
+    prompt: 'Собери команду: собрать образ из текущей папки, передав файл ./npm_token.txt как секрет npm_token'
+    answer:
+      - docker
+      - build
+      - '--secret'
+      - 'id=npm_token,src=./npm_token.txt'
+      - '.'
+    altAnswers:
+      - - docker
+        - build
+        - '.'
+        - '--secret'
+        - 'id=npm_token,src=./npm_token.txt'
+    distractors:
+      - '--build-arg'
+      - '-e'
+    explanation: '--secret передаёт файл сборщику, не записывая его в слой. --build-arg оставил бы значение в истории образа.'
+  - id: t7.s10.l04.t04
+    type: fill_blank
+    prompt: 'Впиши тип монтирования для секрета при сборке'
+    template: 'RUN --mount=type=___,id=npm_token npm ci'
+    acceptedAnswers:
+      - secret
+    explanation: 'type=secret делает файл доступным только на время этого RUN. В итоговом слое его не будет.'
+  - id: t7.s10.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь способ и что происходит с секретом'
+    pairs:
+      - left: 'ENV PASSWORD=…'
+        right: 'Навсегда в метаданных образа'
+      - left: 'ARG TOKEN'
+        right: 'Значение видно в docker history'
+      - left: 'RUN --mount=type=secret'
+        right: 'Доступен только в одном RUN'
+      - left: 'secrets: в compose.yaml'
+        right: 'Файл в /run/secrets/ при работе'
+    explanation: 'Первые два способа оставляют секрет в образе. Безопасные способы передают его только тогда, когда он нужен.'
+  - id: t7.s10.l04.t06
+    type: single_choice
+    question: 'По какому пути по умолчанию появится секрет id=npm_token в RUN --mount=type=secret?'
+    options:
+      - '/run/secrets/npm_token'
+      - '/etc/secrets'
+      - '/tmp/npm_token'
+      - '/root/.npm_token'
+    correctIndex: 0
+    explanation: 'BuildKit монтирует секрет в /run/secrets/ с именем из id. Путь можно изменить параметром target, но по умолчанию он такой.'
+  - id: t7.s10.l04.t07
+    type: true_false
+    statement: 'Переменные, переданные через docker run -e, видны в docker inspect.'
+    answer: true
+    explanation: 'Окружение входит в конфигурацию контейнера, которую inspect печатает целиком. Поэтому секреты надёжнее передавать файлами.'
+  - id: t7.s10.l04.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: дать секрет api_key команде ./fetch.sh'
+    answer:
+      - 'RUN'
+      - '--mount=type=secret,id=api_key'
+      - './fetch.sh'
+    distractors:
+      - '--secret'
+      - 'COPY'
+    explanation: '--mount=type=secret пишут у RUN перед командой. Флаг --secret относится к docker build, а не к Dockerfile.'
+  - id: t7.s10.l04.t09
+    type: single_choice
+    question: 'Зачем официальный образ postgres поддерживает POSTGRES_PASSWORD_FILE?'
+    options:
+      - 'Чтобы читать пароль из файла секрета, а не из переменной окружения'
+      - 'Чтобы хранить пароль внутри образа'
+      - 'Чтобы отключить пароль'
+      - 'Это устаревшее имя POSTGRES_PASSWORD'
+    correctIndex: 0
+    explanation: 'Переменная хранит лишь путь к файлу, а сам пароль лежит в смонтированном секрете. В docker inspect виден только путь.'
+  - id: t7.s10.l04.t10
+    type: fill_blank
+    prompt: 'Впиши файл, исключающий секреты из контекста сборки'
+    template: 'Файлы .env и ключи добавь в ___'
+    acceptedAnswers:
+      - '.dockerignore'
+    explanation: 'Исключённые файлы не отправляются сборщику, поэтому COPY . . не сможет случайно положить их в образ.'
+  - id: t7.s10.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь задачу и способ передать секрет'
+    pairs:
+      - left: 'Токен для npm ci при сборке'
+        right: 'RUN --mount=type=secret'
+      - left: 'Пароль БД при запуске в Compose'
+        right: 'secrets: и переменная *_FILE'
+      - left: 'Файл .env с паролями рядом с кодом'
+        right: 'В .dockerignore и .gitignore'
+    explanation: 'Для сборки — secret mount, для работы — секреты Compose, а файлы с паролями держат вне контекста и репозитория.'
+  - id: t7.s10.l04.t12
+    type: assemble
+    prompt: 'Собери команду: запустить myapp с переменными из файла prod.env'
+    answer:
+      - docker
+      - run
+      - '--env-file'
+      - prod.env
+      - myapp
+    distractors:
+      - '-e'
+      - '--secret'
+    explanation: '--env-file читает переменные из файла, и они не остаются в истории терминала. -e ждёт пару ИМЯ=значение, а не файл.'

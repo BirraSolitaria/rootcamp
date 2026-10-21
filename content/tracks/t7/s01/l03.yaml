@@ -1,0 +1,136 @@
+id: t7.s01.l03
+title: 'Docker Engine: демон и CLI'
+theory:
+  title: 'Клиент говорит, демон делает'
+  blocks:
+    - type: text
+      text: 'Docker Engine устроен как клиент и сервер. Сервер — демон dockerd: фоновый процесс, который на самом деле управляет образами, контейнерами, сетями и томами.'
+    - type: text
+      text: 'Клиент — программа командной строки docker (CLI). Сама она ничего не запускает: превращает команду в запрос к REST API демона и показывает ответ.'
+    - type: text
+      text: 'На Linux CLI по умолчанию подключается к демону через Unix-сокет /var/run/docker.sock. Можно подключиться и к другому, даже удалённому демону: через переменную окружения DOCKER_HOST или контексты.'
+    - type: code
+      code: |-
+        docker context ls   # к каким демонам можно подключиться
+        # если демон не запущен:
+        Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+    - type: text
+      text: 'Контейнер демон создаёт не сам: он поручает это containerd, а тот вызывает runc — низкоуровневую программу, которая создаёт процесс с namespaces и cgroups.'
+    - type: text
+      text: 'Полная форма команд: docker <объект> <действие>, например docker container ls или docker container run. Короткие формы docker ps и docker run делают то же самое.'
+tasks:
+  - id: t7.s01.l03.t01
+    type: single_choice
+    question: 'Что такое dockerd?'
+    options:
+      - 'Демон Docker — фоновый процесс, который управляет контейнерами'
+      - 'Клиент командной строки'
+      - 'Файл с описанием образа'
+      - 'Публичный реестр образов'
+    correctIndex: 0
+    explanation: 'Буква d в конце имени — традиционное обозначение демона (daemon). dockerd выполняет всю работу, а CLI docker только отправляет ему запросы.'
+  - id: t7.s01.l03.t02
+    type: true_false
+    statement: 'CLI docker сам создаёт контейнеры, без участия демона.'
+    answer: false
+    explanation: 'CLI — только клиент: он отправляет запрос в API демона dockerd. Поэтому без работающего демона команды docker ps или docker run завершаются ошибкой.'
+  - id: t7.s01.l03.t03
+    type: match_pairs
+    prompt: 'Сопоставь компонент Docker и его роль'
+    pairs:
+      - left: 'docker (CLI)'
+        right: 'Отправляет команды в API демона'
+      - left: dockerd
+        right: 'Управляет образами, контейнерами, сетями и томами'
+      - left: containerd
+        right: 'Ведёт жизненный цикл контейнеров по поручению демона'
+      - left: runc
+        right: 'Создаёт процесс контейнера с namespaces и cgroups'
+    explanation: 'Работа идёт по цепочке сверху вниз: CLI → dockerd → containerd → runc. Каждый уровень решает свою задачу, а сам процесс контейнера в итоге создаёт runc.'
+  - id: t7.s01.l03.t04
+    type: assemble
+    prompt: 'Собери полную форму команды «объект — действие»: список работающих контейнеров'
+    answer:
+      - docker
+      - container
+      - ls
+    distractors:
+      - daemon
+      - '-a'
+    explanation: 'В полной форме сначала идёт объект (container), потом действие (ls). Это то же самое, что docker ps. Флаг -a здесь лишний: он добавил бы остановленные контейнеры.'
+  - id: t7.s01.l03.t05
+    type: fill_blank
+    prompt: 'Впиши путь к Unix-сокету, через который CLI на Linux говорит с демоном'
+    template: 'По умолчанию CLI подключается к демону через ___'
+    acceptedAnswers:
+      - '/var/run/docker.sock'
+      - 'unix:///var/run/docker.sock'
+      - '/run/docker.sock'
+      - 'unix:///run/docker.sock'
+    explanation: 'Демон слушает Unix-сокет /var/run/docker.sock, и CLI отправляет туда запросы к API. Если сокет недоступен, клиент не сможет связаться с демоном.'
+  - id: t7.s01.l03.t06
+    type: single_choice
+    question: 'Команда вывела «Cannot connect to the Docker daemon». Что это значит?'
+    options:
+      - 'Образ не найден в реестре'
+      - 'Контейнеру не хватило памяти'
+      - 'В имени контейнера опечатка'
+      - 'CLI не смог связаться с демоном dockerd'
+    correctIndex: 3
+    explanation: 'Сообщение прямо говорит, что клиенту не удалось подключиться к демону: чаще всего демон не запущен или нет доступа к его сокету. До образов и контейнеров дело даже не дошло.'
+  - id: t7.s01.l03.t07
+    type: assemble
+    prompt: 'Собери команду: показать контексты, то есть демоны, к которым можно подключиться'
+    answer:
+      - docker
+      - context
+      - ls
+    distractors:
+      - host
+      - daemon
+    explanation: 'Контекст хранит адрес демона, к которому обращается CLI. docker context ls показывает все контексты и отмечает текущий звёздочкой.'
+  - id: t7.s01.l03.t08
+    type: true_false
+    statement: 'docker ps и docker container ls выводят один и тот же список контейнеров.'
+    answer: true
+    explanation: 'docker ps — короткая форма, а docker container ls — полная форма «объект — действие». Обе отправляют демону один и тот же запрос.'
+  - id: t7.s01.l03.t09
+    type: single_choice
+    question: 'Какая переменная окружения указывает CLI адрес другого демона?'
+    options:
+      - 'DOCKER_CLI'
+      - 'DOCKERD_PATH'
+      - 'DOCKER_HOST'
+      - 'HOSTNAME'
+    correctIndex: 2
+    explanation: 'Если задать DOCKER_HOST, например tcp://server:2376 или ssh://user@server, CLI будет отправлять запросы этому демону вместо локального сокета.'
+  - id: t7.s01.l03.t10
+    type: match_pairs
+    prompt: 'Сопоставь короткую форму команды и полную'
+    pairs:
+      - left: 'docker ps'
+        right: 'docker container ls'
+      - left: 'docker ps -a'
+        right: 'docker container ls -a'
+      - left: 'docker run'
+        right: 'docker container run'
+    explanation: 'Полные формы строятся по схеме docker <объект> <действие> и легче запоминаются системно. Короткие формы остались для удобства и делают то же самое.'
+  - id: t7.s01.l03.t11
+    type: fill_blank
+    prompt: 'Впиши объект в полной форме команды, которая выводит работающие контейнеры'
+    template: 'docker ___ ls   (то же, что docker ps)'
+    acceptedAnswers:
+      - container
+    explanation: 'В полной форме сначала называют объект, с которым работаем. Контейнеры — объект container, поэтому docker container ls равна docker ps.'
+  - id: t7.s01.l03.t12
+    type: assemble
+    prompt: 'Собери полную форму команды: показать все контейнеры, включая остановленные'
+    answer:
+      - docker
+      - container
+      - ls
+      - '-a'
+    distractors:
+      - image
+      - run
+    explanation: 'Это полная форма команды docker ps -a: объект container, действие ls и флаг -a, который добавляет остановленные контейнеры.'

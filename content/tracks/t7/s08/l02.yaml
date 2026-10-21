@@ -1,0 +1,164 @@
+id: t7.s08.l02
+title: 'services, image, build'
+theory:
+  title: 'Откуда берётся образ сервиса'
+  blocks:
+    - type: code
+      code: |-
+        services:
+          api:
+            build: ./api
+            image: shop/api:1.0
+          worker:
+            build:
+              context: .
+              dockerfile: docker/worker.Dockerfile
+              target: runtime
+              args:
+                APP_VERSION: "1.0"
+          cache:
+            image: redis:7
+            container_name: shop-cache
+            command: redis-server --appendonly yes
+            restart: unless-stopped
+    - type: text
+      text: 'image — готовый образ: Compose скачает его, если его нет локально. build — собрать образ из Dockerfile: короткая форма — путь к контексту, полная — context, dockerfile, target (этап многоэтапной сборки) и args (значения ARG).'
+    - type: text
+      text: 'Если указаны и build, и image, собранный образ получит имя из image. Без image имя будет проект-сервис, например shop-api.'
+    - type: text
+      text: 'command заменяет CMD образа. container_name задаёт точное имя контейнера, иначе оно будет проект-сервис-номер (shop-cache-1). restart — политика перезапуска: no, always, on-failure (только при ошибке) и unless-stopped (всегда, кроме ручной остановки).'
+    - type: code
+      code: |-
+        docker compose build        # собрать образы сервисов с build
+        docker compose build api    # только api
+        docker compose up -d --build  # пересобрать и запустить
+tasks:
+  - id: t7.s08.l02.t01
+    type: single_choice
+    question: 'Чем отличается image от build в описании сервиса?'
+    options:
+      - 'image — готовый образ, build — собрать образ из Dockerfile'
+      - 'image — для Linux, build — для Windows'
+      - 'build только быстрее скачивает образ'
+      - 'Это синонимы'
+    correctIndex: 0
+    explanation: 'image указывает на существующий образ, build описывает, как его собрать. Их можно сочетать: тогда image станет именем собранного образа.'
+  - id: t7.s08.l02.t02
+    type: true_false
+    statement: 'Без поля image собранный образ сервиса api в проекте shop получит имя shop-api.'
+    answer: true
+    explanation: 'Compose v2 называет собранный образ по схеме проект-сервис. Чтобы задать своё имя и тег, добавь image.'
+  - id: t7.s08.l02.t03
+    type: assemble
+    prompt: 'Собери команду: собрать образ только сервиса api'
+    answer:
+      - docker
+      - compose
+      - build
+      - api
+    distractors:
+      - '--target'
+      - run
+    explanation: 'build с именем сервиса собирает только его образ. Без имени собрались бы все сервисы с секцией build.'
+  - id: t7.s08.l02.t04
+    type: fill_blank
+    prompt: 'Впиши ключ сервиса, который собирает образ из папки ./api'
+    template: '    ___: ./api'
+    acceptedAnswers:
+      - build
+    explanation: 'Короткая форма build — путь к контексту сборки. Dockerfile ищется в корне этого контекста.'
+  - id: t7.s08.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь ключ сервиса и его смысл'
+    pairs:
+      - left: image
+        right: 'Какой образ использовать'
+      - left: build
+        right: 'Как собрать образ'
+      - left: command
+        right: 'Замена CMD'
+      - left: container_name
+        right: 'Точное имя контейнера'
+      - left: restart
+        right: 'Политика перезапуска'
+    explanation: 'Эти ключи соответствуют флагам docker run и docker build, только записаны в файле и не забываются.'
+  - id: t7.s08.l02.t06
+    type: single_choice
+    question: 'Какая политика restart перезапускает контейнер всегда, кроме ручной остановки?'
+    options:
+      - 'no'
+      - always
+      - 'on-failure'
+      - 'unless-stopped'
+    correctIndex: 3
+    explanation: 'unless-stopped запоминает, что ты сам остановил контейнер, и не поднимает его снова. on-failure реагирует только на ненулевой код выхода.'
+  - id: t7.s08.l02.t07
+    type: true_false
+    statement: 'Ключ target в секции build выбирает этап многоэтапной сборки, как флаг --target.'
+    answer: true
+    explanation: 'target передаётся сборщику так же, как docker build --target. Так из одного Dockerfile сервисы получают разные этапы.'
+  - id: t7.s08.l02.t08
+    type: assemble
+    prompt: 'Собери команду: пересобрать образы и запустить проект в фоне'
+    answer:
+      - docker
+      - compose
+      - up
+      - '--build'
+      - '-d'
+    altAnswers:
+      - - docker
+        - compose
+        - up
+        - '-d'
+        - '--build'
+    distractors:
+      - '--rebuild'
+      - '--no-cache'
+    explanation: '--build заставляет up сначала собрать образы, а -d запускает в фоне. Флагов --rebuild и --no-cache у up нет.'
+  - id: t7.s08.l02.t09
+    type: single_choice
+    question: 'У сервиса cache в проекте shop нет container_name. Какое имя получит его первый контейнер?'
+    options:
+      - cache
+      - shop_cache
+      - 'shop-cache-1'
+      - 'cache-shop-1'
+    correctIndex: 2
+    explanation: 'Compose v2 называет контейнеры проект-сервис-номер. Номер нужен, потому что один сервис может иметь несколько копий.'
+  - id: t7.s08.l02.t10
+    type: fill_blank
+    prompt: 'Впиши ключ секции build, который передаёт значения ARG'
+    template: |-
+      build:
+        context: .
+        ___:
+          APP_VERSION: "1.0"
+    acceptedAnswers:
+      - args
+    explanation: 'args — то же, что docker build --build-arg. Значение попадёт в ARG APP_VERSION в Dockerfile.'
+  - id: t7.s08.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь ключ секции build и его смысл'
+    pairs:
+      - left: context
+        right: 'Папка-контекст сборки'
+      - left: dockerfile
+        right: 'Путь к Dockerfile'
+      - left: target
+        right: 'Этап сборки'
+      - left: args
+        right: 'Аргументы ARG'
+    explanation: 'Полная форма build повторяет флаги docker build: контекст, -f, --target и --build-arg.'
+  - id: t7.s08.l02.t12
+    type: assemble
+    prompt: 'Собери строку compose.yaml: заменить CMD на redis-server --appendonly yes'
+    answer:
+      - 'command:'
+      - 'redis-server'
+      - '--appendonly'
+      - 'yes'
+    distractors:
+      - 'CMD'
+      - 'run:'
+    explanation: 'Ключ command в сервисе переопределяет CMD образа, как аргументы после имени образа в docker run.'

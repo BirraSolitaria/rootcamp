@@ -1,0 +1,153 @@
+id: t7.s06.l01
+title: 'FROM и RUN'
+theory:
+  title: 'Начало любого Dockerfile'
+  blocks:
+    - type: text
+      text: 'Dockerfile — текстовый файл с инструкциями для сборки образа. Инструкции выполняются сверху вниз. Их имена принято писать заглавными буквами, строки с # — комментарии.'
+    - type: text
+      text: 'FROM задаёт базовый образ, на котором строится твой. Это первая инструкция Dockerfile (до неё могут быть только комментарии и ARG). FROM scratch означает пустой образ без файлов.'
+    - type: text
+      text: 'RUN выполняет команду во время сборки, а изменения файлов сохраняются в новый слой. При запуске контейнера RUN уже не выполняется.'
+    - type: code
+      code: |-
+        FROM ubuntu:24.04
+        RUN apt-get update && apt-get install -y curl \
+            && rm -rf /var/lib/apt/lists/*
+    - type: text
+      text: 'update и install пишут в одном RUN: иначе слой с update закэшируется, и позже install возьмёт устаревшие списки пакетов. -y нужен, потому что при сборке некому ответить «да». Удаление списков пакетов в том же RUN уменьшает слой.'
+    - type: text
+      text: 'Shell-форма RUN команда запускается через /bin/sh -c, поэтому работают && и $ПЕРЕМЕННЫЕ. Exec-форма RUN ["программа", "аргумент"] запускает программу без оболочки.'
+tasks:
+  - id: t7.s06.l01.t01
+    type: single_choice
+    question: 'Что делает инструкция FROM?'
+    options:
+      - 'Копирует файлы с хоста'
+      - 'Запускает команду при сборке'
+      - 'Задаёт базовый образ, на котором строится новый'
+      - 'Указывает, откуда скачать Dockerfile'
+    correctIndex: 2
+    explanation: 'Новый образ — это слои базового образа плюс твои слои сверху. FROM выбирает, с каких слоёв начать.'
+  - id: t7.s06.l01.t02
+    type: true_false
+    statement: 'Команда из RUN выполняется при каждом запуске контейнера.'
+    answer: false
+    explanation: 'RUN работает только при сборке образа, а результат сохраняется в слой. Команду при запуске контейнера задают CMD и ENTRYPOINT.'
+  - id: t7.s06.l01.t03
+    type: assemble
+    prompt: 'Собери первую строку Dockerfile: базовый образ python с тегом 3.12-slim'
+    answer:
+      - 'FROM'
+      - 'python:3.12-slim'
+    distractors:
+      - 'RUN'
+      - python
+    explanation: 'FROM принимает имя образа с тегом, как docker pull. Без тега взялся бы python:latest, и версия могла бы неожиданно поменяться.'
+  - id: t7.s06.l01.t04
+    type: fill_blank
+    prompt: 'Впиши инструкцию, задающую базовый образ'
+    template: '___ ubuntu:24.04   # с чего начинается образ'
+    acceptedAnswers:
+      - 'FROM'
+    explanation: 'С FROM начинается сборка: все дальнейшие инструкции добавляют слои поверх ubuntu:24.04.'
+  - id: t7.s06.l01.t05
+    type: match_pairs
+    prompt: 'Сопоставь строку Dockerfile и её смысл'
+    pairs:
+      - left: 'FROM node:20'
+        right: 'Базовый образ node версии 20'
+      - left: 'FROM scratch'
+        right: 'Пустой базовый образ'
+      - left: 'RUN npm install'
+        right: 'Команда при сборке, результат — новый слой'
+      - left: '# установка зависимостей'
+        right: 'Комментарий, Docker его пропускает'
+    explanation: 'FROM выбирает основу, RUN добавляет слои, а комментарии нужны только людям. scratch пригодится для полностью статических программ.'
+  - id: t7.s06.l01.t06
+    type: single_choice
+    question: 'Почему apt-get update и apt-get install пишут в одном RUN?'
+    options:
+      - 'Иначе слой с update закэшируется, и install может взять устаревшие списки пакетов'
+      - 'Docker запрещает несколько RUN подряд'
+      - 'Так команда выполняется при запуске контейнера'
+      - 'apt-get install не работает без &&'
+    correctIndex: 0
+    explanation: 'Docker кэширует слои. Отдельный RUN apt-get update не пересоберётся, даже если позже добавить пакет в install, и списки пакетов устареют.'
+  - id: t7.s06.l01.t07
+    type: true_false
+    statement: 'apt-get install в Dockerfile пишут с флагом -y, потому что при сборке некому подтвердить установку.'
+    answer: true
+    explanation: 'Сборка не интерактивна: без -y apt-get спросит «Продолжить?» и, не получив ответа, прервёт установку, а сборка упадёт.'
+  - id: t7.s06.l01.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: через && обновить списки пакетов и установить curl'
+    answer:
+      - 'RUN'
+      - 'apt-get'
+      - update
+      - '&&'
+      - 'apt-get'
+      - install
+      - '-y'
+      - curl
+    altAnswers:
+      - - 'RUN'
+        - 'apt-get'
+        - update
+        - '&&'
+        - 'apt-get'
+        - '-y'
+        - install
+        - curl
+      - - 'RUN'
+        - 'apt-get'
+        - update
+        - '&&'
+        - 'apt-get'
+        - install
+        - curl
+        - '-y'
+    distractors:
+      - 'CMD'
+      - yum
+    explanation: 'Обе команды в одном RUN дают один слой и свежие списки пакетов. && запускает install, только если update прошёл успешно.'
+  - id: t7.s06.l01.t09
+    type: single_choice
+    question: 'Когда и где выполняется команда из RUN?'
+    options:
+      - 'При docker run, в работающем контейнере'
+      - 'На хосте, вне Docker'
+      - 'При docker pull, на сервере реестра'
+      - 'При сборке образа, а результат сохраняется в новый слой'
+    correctIndex: 3
+    explanation: 'Сборщик выполняет RUN во временном окружении на основе предыдущих слоёв и сохраняет изменённые файлы как новый слой образа.'
+  - id: t7.s06.l01.t10
+    type: fill_blank
+    prompt: 'Впиши, что удалить, чтобы слой со списками пакетов apt стал меньше'
+    template: 'RUN apt-get update && apt-get install -y curl && rm -rf ___'
+    acceptedAnswers:
+      - '/var/lib/apt/lists/*'
+      - '/var/lib/apt/lists'
+    explanation: 'Списки пакетов нужны только для установки. Удалять их надо в том же RUN: в следующем слое они всё равно остались бы в предыдущем.'
+  - id: t7.s06.l01.t11
+    type: match_pairs
+    prompt: 'Сопоставь форму RUN и её поведение'
+    pairs:
+      - left: 'RUN echo $HOME'
+        right: 'Shell-форма: оболочка подставит $HOME'
+      - left: 'RUN ["echo", "$HOME"]'
+        right: 'Exec-форма: без оболочки, $HOME не раскроется'
+      - left: 'RUN apt-get update && apt-get install -y curl'
+        right: 'Две команды в одном слое'
+    explanation: 'Переменные и && обрабатывает оболочка /bin/sh. В exec-форме оболочки нет, поэтому $HOME останется просто текстом.'
+  - id: t7.s06.l01.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: начать с пустого образа без файлов'
+    answer:
+      - 'FROM'
+      - scratch
+    distractors:
+      - alpine
+      - empty
+    explanation: 'scratch — особое имя: пустой образ без слоёв. alpine — маленький, но полноценный Linux-образ, а образа empty нет.'

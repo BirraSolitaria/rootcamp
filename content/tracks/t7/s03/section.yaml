@@ -1,0 +1,9 @@
+id: t7.s03
+title: 'docker run и жизненный цикл контейнера'
+description: 'Как запускать контейнеры с нужными флагами, управлять ими и заглядывать внутрь.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

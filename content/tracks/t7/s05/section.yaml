@@ -1,0 +1,9 @@
+id: t7.s05
+title: 'Сети'
+description: 'Как контейнеры получают сеть, находят друг друга по имени и открывают порты наружу.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

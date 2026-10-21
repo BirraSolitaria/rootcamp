@@ -1,0 +1,21 @@
+id: t7
+order: 7
+title: 'Docker'
+description: 'Контейнеры с нуля: образы, docker run, тома, сети, Dockerfile, многоэтапная сборка, Compose, отладка и лучшие практики.'
+status: complete
+prerequisites:
+  - t1
+  - t2
+  - t6
+reviewedAt: '2026-10-20'
+sections:
+  - s01
+  - s02
+  - s03
+  - s04
+  - s05
+  - s06
+  - s07
+  - s08
+  - s09
+  - s10

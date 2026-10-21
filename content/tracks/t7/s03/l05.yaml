@@ -1,0 +1,184 @@
+id: t7.s03.l05
+title: 'logs, exec, inspect'
+theory:
+  title: 'Заглядываем в контейнер'
+  blocks:
+    - type: text
+      text: 'docker logs показывает то, что главный процесс писал в stdout и stderr. Логи, которые программа пишет в файл внутри контейнера, сюда не попадают.'
+    - type: code
+      code: |-
+        docker logs web
+        docker logs -f --tail 20 web   # последние 20 строк и дальше
+        docker logs -t --since 10m web # с метками времени, за 10 минут
+    - type: text
+      text: 'docker exec запускает дополнительный процесс в уже работающем контейнере. Для остановленного он не работает. Выход из такой оболочки не останавливает контейнер: главный процесс продолжает жить.'
+    - type: code
+      code: |-
+        docker exec web ls /       # одна команда
+        docker exec -it web sh     # оболочка (bash есть не везде)
+    - type: text
+      text: 'docker inspect выводит JSON со всеми настройками и состоянием контейнера: образ, переменные, порты, статус, код выхода. --format вырезает нужное поле.'
+    - type: code
+      code: |-
+        docker inspect web
+        docker inspect --format '{{.State.Status}}' web
+        docker inspect --format '{{.State.ExitCode}}' web
+tasks:
+  - id: t7.s03.l05.t01
+    type: single_choice
+    question: 'Что показывает docker logs web?'
+    options:
+      - 'Вывод главного процесса в stdout и stderr'
+      - 'Все файлы журналов внутри контейнера'
+      - 'Список команд, выполненных в контейнере'
+      - 'Журнал демона dockerd'
+    correctIndex: 0
+    explanation: 'Docker сохраняет потоки вывода главного процесса. Поэтому в образах приложения принято писать логи в stdout, а не в файлы.'
+  - id: t7.s03.l05.t02
+    type: true_false
+    statement: 'docker exec можно выполнить и в остановленном контейнере.'
+    answer: false
+    explanation: 'exec добавляет процесс к уже работающим процессам контейнера. Если контейнер остановлен, его сначала нужно запустить через docker start.'
+  - id: t7.s03.l05.t03
+    type: assemble
+    prompt: 'Собери команду: показать последние 20 строк лога web и следить за новыми'
+    answer:
+      - docker
+      - logs
+      - '-f'
+      - '--tail'
+      - '20'
+      - web
+    altAnswers:
+      - - docker
+        - logs
+        - '--tail'
+        - '20'
+        - '-f'
+        - web
+      - - docker
+        - logs
+        - web
+        - '-f'
+        - '--tail'
+        - '20'
+      - - docker
+        - logs
+        - web
+        - '--tail'
+        - '20'
+        - '-f'
+      - - docker
+        - logs
+        - '-f'
+        - web
+        - '--tail'
+        - '20'
+      - - docker
+        - logs
+        - '--tail'
+        - '20'
+        - web
+        - '-f'
+    distractors:
+      - '--head'
+      - '-a'
+    explanation: '--tail 20 ограничивает вывод последними строками, а -f (follow) оставляет команду работать и печатает новые строки по мере появления.'
+  - id: t7.s03.l05.t04
+    type: fill_blank
+    prompt: 'Впиши команду, которая открывает оболочку в работающем контейнере'
+    template: 'docker ___ -it web sh'
+    acceptedAnswers:
+      - exec
+      - 'container exec'
+    explanation: 'exec запускает новый процесс, здесь sh, внутри уже работающего контейнера. -it делает его интерактивным.'
+  - id: t7.s03.l05.t05
+    type: match_pairs
+    prompt: 'Сопоставь флаг docker logs и его действие'
+    pairs:
+      - left: '-f'
+        right: 'Следить за новыми строками'
+      - left: '--tail 20'
+        right: 'Только последние 20 строк'
+      - left: '-t'
+        right: 'Добавить метки времени'
+      - left: '--since 10m'
+        right: 'Только за последние 10 минут'
+    explanation: 'Флаги сужают и дополняют вывод. В долгоживущем контейнере логов бывает очень много, поэтому --tail и --since экономят время.'
+  - id: t7.s03.l05.t06
+    type: single_choice
+    question: 'Чем docker exec отличается от docker run?'
+    options:
+      - 'Ничем, это синонимы'
+      - 'exec работает только с образами, run — с контейнерами'
+      - 'exec запускает процесс в работающем контейнере, а run создаёт новый контейнер'
+      - 'exec всегда запускает контейнер в фоне'
+    correctIndex: 2
+    explanation: 'run создаёт новый контейнер из образа, а exec заходит в существующий. Поэтому exec принимает имя контейнера, а run — имя образа.'
+  - id: t7.s03.l05.t07
+    type: true_false
+    statement: 'Если выйти из оболочки, открытой через docker exec -it, контейнер остановится.'
+    answer: false
+    explanation: 'Оболочка от exec — дополнительный процесс. Контейнер живёт, пока работает его главный процесс, а он не зависит от этой оболочки.'
+  - id: t7.s03.l05.t08
+    type: assemble
+    prompt: 'Собери команду: вывести только статус контейнера web через --format'
+    answer:
+      - docker
+      - inspect
+      - '--format'
+      - "'{{.State.Status}}'"
+      - web
+    altAnswers:
+      - - docker
+        - inspect
+        - web
+        - '--format'
+        - "'{{.State.Status}}'"
+    distractors:
+      - "'{{.Status}}'"
+      - logs
+    explanation: 'Состояние лежит в разделе State JSON-вывода, поэтому путь к полю — .State.Status. Шаблон без State не найдёт поле.'
+  - id: t7.s03.l05.t09
+    type: single_choice
+    question: 'Программа в контейнере пишет логи только в файл /var/log/app.log. Что покажет docker logs?'
+    options:
+      - 'Содержимое файла /var/log/app.log'
+      - 'Только то, что попало в stdout и stderr, — возможно, ничего'
+      - 'Ошибку: логи не найдены'
+      - 'Логи всех контейнеров'
+    correctIndex: 1
+    explanation: 'docker logs читает только потоки вывода главного процесса. Файл можно посмотреть через docker exec web cat /var/log/app.log.'
+  - id: t7.s03.l05.t10
+    type: fill_blank
+    prompt: 'Впиши поле с кодом выхода контейнера'
+    template: "docker inspect --format '{{.State.___}}' web"
+    acceptedAnswers:
+      - 'ExitCode'
+    explanation: 'Поле ExitCode в разделе State хранит код завершения главного процесса: 0 — успех, другое число — ошибка.'
+  - id: t7.s03.l05.t11
+    type: match_pairs
+    prompt: 'Сопоставь задачу и команду для контейнера web'
+    pairs:
+      - left: 'Посмотреть вывод программы'
+        right: 'docker logs web'
+      - left: 'Открыть оболочку внутри'
+        right: 'docker exec -it web sh'
+      - left: 'Узнать все настройки'
+        right: 'docker inspect web'
+      - left: 'Выполнить одну команду внутри'
+        right: 'docker exec web ls /'
+    explanation: 'logs — для вывода, exec — для действий внутри контейнера, inspect — для настроек и состояния. Вместе они покрывают большую часть диагностики.'
+  - id: t7.s03.l05.t12
+    type: assemble
+    prompt: 'Собери команду: открыть интерактивную оболочку sh в работающем контейнере web'
+    answer:
+      - docker
+      - exec
+      - '-it'
+      - web
+      - sh
+    distractors:
+      - run
+      - '-d'
+    explanation: 'exec заходит в существующий контейнер, а -it нужен для интерактивной работы. docker run создал бы новый контейнер из образа с именем web.'

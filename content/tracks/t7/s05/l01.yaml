@@ -1,0 +1,156 @@
+id: t7.s05.l01
+title: 'Драйверы bridge, host, none'
+theory:
+  title: 'Какую сеть получит контейнер'
+  blocks:
+    - type: text
+      text: 'Сетью контейнера управляет сетевой драйвер. Его выбирают флагом --network при запуске. Сразу после установки docker network ls покажет три сети: bridge, host и none.'
+    - type: text
+      text: 'bridge — драйвер по умолчанию. Docker создаёт на хосте виртуальный мост docker0 и частную подсеть, обычно 172.17.0.0/16. Каждый контейнер получает в ней свой IP, выходит в интернет через NAT хоста, а снаружи доступен только через опубликованные порты -p.'
+    - type: text
+      text: 'host — контейнер использует сеть хоста напрямую: сетевой изоляции нет, NAT нет, а флаг -p игнорируется. Если nginx слушает 80, он слушает порт 80 самого хоста. Полноценно работает на Linux.'
+    - type: text
+      text: 'none — у контейнера есть только loopback (lo), никакой внешней сети. Подходит для задач, которым сеть не нужна.'
+    - type: code
+      code: |-
+        docker run -d nginx                       # bridge
+        docker run -d --network host nginx        # сеть хоста
+        docker run --rm --network none alpine ip addr
+    - type: text
+      text: 'Есть и другие драйверы, например overlay — сеть между контейнерами на нескольких хостах (Docker Swarm).'
+tasks:
+  - id: t7.s05.l01.t01
+    type: single_choice
+    question: 'К какой сети подключается контейнер, если не указать --network?'
+    options:
+      - host
+      - bridge
+      - none
+      - overlay
+    correctIndex: 1
+    explanation: 'bridge — драйвер по умолчанию: контейнер получает IP в частной подсети и выходит наружу через NAT хоста.'
+  - id: t7.s05.l01.t02
+    type: true_false
+    statement: 'При --network host флаг -p не действует.'
+    answer: true
+    explanation: 'В режиме host контейнер слушает порты прямо на хосте, и перенаправлять нечего. Docker игнорирует -p и предупреждает об этом.'
+  - id: t7.s05.l01.t03
+    type: assemble
+    prompt: 'Собери команду: запустить alpine без доступа к сети и показать его интерфейсы'
+    answer:
+      - docker
+      - run
+      - '--rm'
+      - '--network'
+      - none
+      - alpine
+      - ip
+      - addr
+    altAnswers:
+      - - docker
+        - run
+        - '--network'
+        - none
+        - '--rm'
+        - alpine
+        - ip
+        - addr
+    distractors:
+      - host
+      - '--no-net'
+    explanation: 'С драйвером none ip addr покажет только интерфейс lo. Флага --no-net у docker run нет.'
+  - id: t7.s05.l01.t04
+    type: fill_blank
+    prompt: 'Впиши драйвер, чтобы nginx слушал порт 80 прямо на хосте'
+    template: 'docker run -d --network ___ nginx'
+    acceptedAnswers:
+      - host
+    explanation: 'В сети host у контейнера нет своей сетевой изоляции, поэтому порт 80 nginx — это порт 80 хоста, без -p.'
+  - id: t7.s05.l01.t05
+    type: match_pairs
+    prompt: 'Сопоставь сетевой драйвер и его описание'
+    pairs:
+      - left: bridge
+        right: 'Частная подсеть на хосте, драйвер по умолчанию'
+      - left: host
+        right: 'Общая сеть с хостом, без изоляции'
+      - left: none
+        right: 'Только loopback, без внешней сети'
+      - left: overlay
+        right: 'Сеть между несколькими хостами'
+    explanation: 'Драйвер определяет, насколько контейнер изолирован в сети. bridge — разумный баланс, host — максимум доступа, none — полная изоляция.'
+  - id: t7.s05.l01.t06
+    type: single_choice
+    question: 'Какой IP обычно получает контейнер в сети bridge по умолчанию?'
+    options:
+      - '127.0.0.1'
+      - 'IP-адрес хоста'
+      - '192.168.1.x из домашней сети'
+      - 'Адрес из подсети 172.17.0.0/16'
+    correctIndex: 3
+    explanation: 'Docker создаёт для сети bridge частную подсеть, обычно 172.17.0.0/16. Если она занята, Docker выберет другую.'
+  - id: t7.s05.l01.t07
+    type: true_false
+    statement: 'Контейнер с --network none может скачивать файлы из интернета.'
+    answer: false
+    explanation: 'В режиме none у контейнера есть только loopback-интерфейс. Выйти в сеть, включая интернет, ему не через что.'
+  - id: t7.s05.l01.t08
+    type: assemble
+    prompt: 'Собери команду: запустить nginx в фоне в сети хоста'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--network'
+      - host
+      - nginx
+    altAnswers:
+      - - docker
+        - run
+        - '--network'
+        - host
+        - '-d'
+        - nginx
+    distractors:
+      - bridge
+      - '--host'
+    explanation: 'Драйвер задаётся значением флага --network. Отдельного флага --host нет, а bridge — сеть по умолчанию.'
+  - id: t7.s05.l01.t09
+    type: single_choice
+    question: 'Зачем запускать контейнер с --network none?'
+    options:
+      - 'Для полной сетевой изоляции задач, которым сеть не нужна'
+      - 'Чтобы ускорить загрузку образов'
+      - 'Чтобы контейнер получил IP хоста'
+      - 'Чтобы опубликовать все порты'
+    correctIndex: 0
+    explanation: 'Если программа только обрабатывает файлы, сеть ей не нужна. Без сети вредоносный код не сможет ничего отправить наружу.'
+  - id: t7.s05.l01.t10
+    type: fill_blank
+    prompt: 'Впиши имя моста, который Docker создаёт на хосте для сети bridge'
+    template: 'Виртуальный мост сети bridge на хосте: ___'
+    acceptedAnswers:
+      - docker0
+    explanation: 'docker0 — сетевой интерфейс хоста, к которому подключены контейнеры сети bridge по умолчанию. Его видно в выводе ip addr на хосте.'
+  - id: t7.s05.l01.t11
+    type: match_pairs
+    prompt: 'Сопоставь задачу и подходящий сетевой драйвер'
+    pairs:
+      - left: 'Веб-сервис, открытый через -p'
+        right: bridge
+      - left: 'Сеть без NAT и изоляции на Linux'
+        right: host
+      - left: 'Обработка файлов без доступа к сети'
+        right: none
+    explanation: 'bridge подходит почти всегда. host убирает накладные расходы NAT ценой изоляции, а none выбирают, когда сеть не нужна вовсе.'
+  - id: t7.s05.l01.t12
+    type: assemble
+    prompt: 'Собери команду: показать список сетей Docker'
+    answer:
+      - docker
+      - network
+      - ls
+    distractors:
+      - ps
+      - show
+    explanation: 'Сети — отдельный объект Docker, поэтому команда строится как docker network <действие>. Сразу после установки там есть bridge, host и none.'

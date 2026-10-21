@@ -1,0 +1,142 @@
+id: t7.s06.l03
+title: 'CMD и ENTRYPOINT'
+theory:
+  title: 'Что запустится в контейнере'
+  blocks:
+    - type: text
+      text: 'CMD задаёт команду по умолчанию при запуске контейнера. Аргументы после имени образа в docker run её заменяют. Если CMD несколько, действует только последняя.'
+    - type: text
+      text: 'ENTRYPOINT задаёт неизменяемую программу. Аргументы docker run добавляются к ней, а не заменяют. Вместе с ENTRYPOINT инструкция CMD задаёт аргументы по умолчанию.'
+    - type: code
+      code: |-
+        ENTRYPOINT ["ping", "-c", "3"]
+        CMD ["localhost"]
+        # docker run img             -> ping -c 3 localhost
+        # docker run img example.com -> ping -c 3 example.com
+        # docker run --entrypoint sh -it img  -> заменить ENTRYPOINT
+    - type: text
+      text: 'Exec-форма — JSON-массив в двойных кавычках: CMD ["node", "server.js"]. Программа сама становится главным процессом (PID 1) и получает SIGTERM от docker stop.'
+    - type: text
+      text: 'Shell-форма CMD node server.js запускает программу через /bin/sh -c. Главным процессом становится оболочка, сигнал до программы может не дойти, и docker stop ждёт 10 секунд до SIGKILL. Поэтому для CMD и ENTRYPOINT предпочитают exec-форму.'
+tasks:
+  - id: t7.s06.l03.t01
+    type: single_choice
+    question: 'Что задаёт инструкция CMD?'
+    options:
+      - 'Команду, которая выполнится при сборке'
+      - 'Команду по умолчанию при запуске контейнера'
+      - 'Имя образа'
+      - 'Неизменяемую программу, к которой добавляются аргументы'
+    correctIndex: 1
+    explanation: 'CMD — значение по умолчанию: если в docker run не указать команду, запустится CMD. Неизменяемую программу задаёт ENTRYPOINT.'
+  - id: t7.s06.l03.t02
+    type: true_false
+    statement: 'Если в Dockerfile две инструкции CMD, при запуске выполнятся обе.'
+    answer: false
+    explanation: 'Каждая следующая CMD заменяет предыдущую, поэтому действует только последняя. Чтобы запустить несколько команд, нужен скрипт или &&.'
+  - id: t7.s06.l03.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile в exec-форме: по умолчанию запускать python app.py'
+    answer:
+      - 'CMD'
+      - '["python",'
+      - '"app.py"]'
+    distractors:
+      - 'RUN'
+      - 'START'
+    explanation: 'CMD задаёт команду при запуске контейнера, а JSON-массив — exec-форма. RUN выполнил бы python app.py при сборке.'
+  - id: t7.s06.l03.t04
+    type: fill_blank
+    prompt: 'Впиши флаг docker run, который заменяет ENTRYPOINT'
+    template: 'docker run -it --___ sh myimage'
+    acceptedAnswers:
+      - entrypoint
+    explanation: 'Обычные аргументы docker run не трогают ENTRYPOINT. Чтобы заменить саму программу, например для отладки через sh, нужен --entrypoint.'
+  - id: t7.s06.l03.t05
+    type: match_pairs
+    prompt: 'Образ: ENTRYPOINT ["ping"], CMD ["localhost"]. Сопоставь запуск и команду'
+    pairs:
+      - left: 'docker run img'
+        right: 'ping localhost'
+      - left: 'docker run img example.com'
+        right: 'ping example.com'
+      - left: 'docker run --entrypoint echo img hi'
+        right: 'echo hi'
+    explanation: 'Аргументы docker run заменяют CMD и добавляются к ENTRYPOINT. --entrypoint меняет саму программу, а CMD при этом сбрасывается.'
+  - id: t7.s06.l03.t06
+    type: single_choice
+    question: 'Почему CMD ["node", "server.js"] лучше, чем CMD node server.js?'
+    options:
+      - 'JSON-массив занимает меньше места'
+      - 'Shell-форма не поддерживается в Docker 27'
+      - 'Exec-форма выполняется при сборке'
+      - 'В exec-форме node — главный процесс и сразу получает SIGTERM от docker stop'
+    correctIndex: 3
+    explanation: 'В shell-форме главным процессом становится /bin/sh, и сигнал может не дойти до node. Тогда docker stop ждёт таймаут и убивает процесс.'
+  - id: t7.s06.l03.t07
+    type: true_false
+    statement: 'Аргументы после имени образа в docker run заменяют CMD, но не ENTRYPOINT.'
+    answer: true
+    explanation: 'ENTRYPOINT остаётся на месте, а аргументы занимают место CMD. Поэтому образ с ENTRYPOINT ведёт себя как программа, принимающая параметры.'
+  - id: t7.s06.l03.t08
+    type: assemble
+    prompt: 'Собери строку: всегда запускать python app.py, добавляя к нему аргументы docker run'
+    answer:
+      - 'ENTRYPOINT'
+      - '["python",'
+      - '"app.py"]'
+    distractors:
+      - 'CMD'
+      - 'RUN'
+    explanation: 'ENTRYPOINT не заменяется аргументами docker run, а получает их в конец. С CMD аргументы заменили бы всю команду.'
+  - id: t7.s06.l03.t09
+    type: single_choice
+    question: 'ENTRYPOINT ["ping", "-c", "3"] и CMD ["localhost"]. Что выполнит docker run img 8.8.8.8?'
+    options:
+      - 'ping -c 3 localhost'
+      - 'ping -c 3 localhost 8.8.8.8'
+      - 'ping -c 3 8.8.8.8'
+      - '8.8.8.8'
+    correctIndex: 2
+    explanation: 'Аргумент 8.8.8.8 заменяет CMD ["localhost"] и добавляется к ENTRYPOINT. Получается ping -c 3 8.8.8.8.'
+  - id: t7.s06.l03.t10
+    type: fill_blank
+    prompt: 'Впиши название формы инструкции в виде JSON-массива'
+    template: 'CMD ["node", "server.js"] — это ___-форма'
+    acceptedAnswers:
+      - exec
+    explanation: 'Exec-форма запускает программу напрямую, без оболочки. Название идёт от системного вызова exec, который заменяет процесс программой.'
+  - id: t7.s06.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь строку Dockerfile и её роль'
+    pairs:
+      - left: 'CMD node server.js'
+        right: 'Shell-форма: запуск через /bin/sh -c'
+      - left: 'CMD ["node", "server.js"]'
+        right: 'Exec-форма: программа — PID 1'
+      - left: 'ENTRYPOINT ["node"]'
+        right: 'Неизменяемая программа'
+      - left: 'CMD ["server.js"] после ENTRYPOINT'
+        right: 'Аргументы по умолчанию'
+    explanation: 'Форма определяет, кто станет главным процессом. А пара ENTRYPOINT и CMD делит команду на неизменную часть и часть, которую можно заменить.'
+  - id: t7.s06.l03.t12
+    type: assemble
+    prompt: 'Собери команду: открыть интерактивный sh в образе myimage вместо его ENTRYPOINT'
+    answer:
+      - docker
+      - run
+      - '-it'
+      - '--entrypoint'
+      - sh
+      - myimage
+    altAnswers:
+      - - docker
+        - run
+        - '--entrypoint'
+        - sh
+        - '-it'
+        - myimage
+    distractors:
+      - '--cmd'
+      - exec
+    explanation: '--entrypoint заменяет программу из образа, а -it нужен для интерактивной оболочки. Флага --cmd у docker run нет.'

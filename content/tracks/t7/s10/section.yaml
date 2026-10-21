@@ -1,0 +1,9 @@
+id: t7.s10
+title: 'Лучшие практики'
+description: 'Как делать образы безопасными, маленькими и понятными и не захламлять диск.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

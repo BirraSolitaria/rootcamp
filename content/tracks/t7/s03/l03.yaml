@@ -1,0 +1,170 @@
+id: t7.s03.l03
+title: 'Переменные окружения -e'
+theory:
+  title: 'Настраиваем приложение снаружи'
+  blocks:
+    - type: text
+      text: 'Переменные окружения — пары ИМЯ=значение, которые процесс читает при старте. Так один и тот же образ настраивают под разные среды без пересборки.'
+    - type: code
+      code: |-
+        docker run -e MODE=prod myapp
+        docker run -e A=1 -e B=2 alpine env   # env печатает переменные
+        docker run -e MODE myapp              # значение взять с хоста
+        docker run --env-file app.env myapp
+    - type: text
+      text: '-e (или --env) задаёт одну переменную, для нескольких повтори флаг. -e ИМЯ без значения берёт значение из окружения хоста; если на хосте переменной нет, она не передаётся.'
+    - type: text
+      text: '--env-file читает переменные из файла: по одной строке ИМЯ=значение, строки с # пропускаются. Кавычки docker run не убирает: NAME="Bob" даст значение вместе с кавычками.'
+    - type: text
+      text: 'Образ может задавать значения по умолчанию (инструкция ENV), а -e их переопределяет. Некоторые образы требуют переменную: postgres без POSTGRES_PASSWORD сразу завершается с ошибкой.'
+    - type: text
+      text: 'Переменные видны в docker inspect, поэтому секреты через -e не скрыты от тех, у кого есть доступ к Docker.'
+tasks:
+  - id: t7.s03.l03.t01
+    type: single_choice
+    question: 'Как передать в контейнер переменную MODE со значением prod?'
+    options:
+      - 'docker run --var MODE=prod myapp'
+      - 'docker run myapp MODE=prod'
+      - 'docker run -e MODE=prod myapp'
+      - 'docker run -m MODE=prod myapp'
+    correctIndex: 2
+    explanation: '-e (--env) задаёт переменную окружения. Текст после имени образа стал бы командой контейнера, а не переменной.'
+  - id: t7.s03.l03.t02
+    type: true_false
+    statement: 'Значение из -e переопределяет значение по умолчанию, заданное в образе через ENV.'
+    answer: true
+    explanation: 'ENV в образе — лишь значение по умолчанию. При запуске -e имеет приоритет, поэтому образ можно перенастроить без пересборки.'
+  - id: t7.s03.l03.t03
+    type: assemble
+    prompt: 'Собери команду: запустить postgres:16 в фоне с паролем secret в POSTGRES_PASSWORD'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '-e'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'postgres:16'
+    altAnswers:
+      - - docker
+        - run
+        - '-e'
+        - 'POSTGRES_PASSWORD=secret'
+        - '-d'
+        - 'postgres:16'
+    distractors:
+      - '--env-file'
+      - '-p'
+    explanation: 'Образ postgres не стартует без пароля суперпользователя. Пара ИМЯ=значение идёт сразу после -e, а порядок флагов неважен.'
+  - id: t7.s03.l03.t04
+    type: fill_blank
+    prompt: 'Впиши флаг, который читает переменные из файла'
+    template: 'docker run --___ app.env myapp'
+    acceptedAnswers:
+      - 'env-file'
+    explanation: '--env-file удобен, когда переменных много: они лежат в файле по одной на строку, и команда остаётся короткой.'
+  - id: t7.s03.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь способ задать переменную и его смысл'
+    pairs:
+      - left: '-e MODE=prod'
+        right: 'Задать значение явно'
+      - left: '-e MODE'
+        right: 'Взять значение из окружения хоста'
+      - left: '--env-file app.env'
+        right: 'Прочитать переменные из файла'
+      - left: 'ENV в образе'
+        right: 'Значение по умолчанию'
+    explanation: 'ENV задаёт значение по умолчанию при сборке образа, а остальные способы работают при запуске и переопределяют его.'
+  - id: t7.s03.l03.t06
+    type: single_choice
+    question: 'docker run -d postgres:16 сразу завершается. Вероятная причина?'
+    options:
+      - 'Не задана обязательная переменная POSTGRES_PASSWORD'
+      - 'Не опубликован порт 5432'
+      - 'Не указан флаг -it'
+      - 'Образ postgres нельзя запускать в фоне'
+    correctIndex: 0
+    explanation: 'Скрипт запуска postgres проверяет пароль и без него выходит с ошибкой. docker logs покажет сообщение, а исправление — добавить -e POSTGRES_PASSWORD=…'
+  - id: t7.s03.l03.t07
+    type: true_false
+    statement: 'Переменные, переданные через -e, не видны в docker inspect.'
+    answer: false
+    explanation: 'Переменные хранятся в настройках контейнера, и docker inspect их показывает. Поэтому пароли через -e видит любой, кто может выполнять команды docker.'
+  - id: t7.s03.l03.t08
+    type: assemble
+    prompt: 'Собери команду: передать переменные A=1 и B=2 в alpine и вывести окружение'
+    answer:
+      - docker
+      - run
+      - '-e'
+      - 'A=1'
+      - '-e'
+      - 'B=2'
+      - alpine
+      - env
+    altAnswers:
+      - - docker
+        - run
+        - '-e'
+        - 'B=2'
+        - '-e'
+        - 'A=1'
+        - alpine
+        - env
+    distractors:
+      - 'A=1,B=2'
+      - '-p'
+    explanation: 'Для каждой переменной нужен свой -e. Через запятую не получится: A=1,B=2 стало бы значением одной переменной A.'
+  - id: t7.s03.l03.t09
+    type: single_choice
+    question: 'Что будет при docker run -e MODE myapp, если на хосте переменная MODE не задана?'
+    options:
+      - 'Docker выдаст ошибку'
+      - 'MODE получит значение по умолчанию true'
+      - 'MODE станет равна пустой строке'
+      - 'Переменная MODE не будет передана в контейнер'
+    correctIndex: 3
+    explanation: '-e без значения копирует переменную с хоста. Если копировать нечего, Docker передаёт только имя, и переменной MODE в контейнере не будет.'
+  - id: t7.s03.l03.t10
+    type: fill_blank
+    prompt: 'Впиши флаг, задающий одну переменную окружения'
+    template: 'docker run ___ APP_MODE=debug myapp'
+    acceptedAnswers:
+      - '-e'
+      - '--env'
+    explanation: '-e — короткая форма --env. Флаг можно повторять, чтобы передать несколько переменных.'
+  - id: t7.s03.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь строку в файле app.env и результат'
+    pairs:
+      - left: 'MODE=prod'
+        right: 'MODE получит значение prod'
+      - left: '# настройки'
+        right: 'Строка пропускается'
+      - left: 'EMPTY='
+        right: 'Переменная с пустым значением'
+      - left: 'NAME="Bob"'
+        right: 'Значение вместе с кавычками'
+    explanation: 'docker run читает файл буквально: строки с # — комментарии, а кавычки становятся частью значения. Поэтому в env-файле для docker run кавычки обычно не пишут.'
+  - id: t7.s03.l03.t12
+    type: assemble
+    prompt: 'Собери команду: запустить myapp в фоне с переменными из файла app.env'
+    answer:
+      - docker
+      - run
+      - '-d'
+      - '--env-file'
+      - app.env
+      - myapp
+    altAnswers:
+      - - docker
+        - run
+        - '--env-file'
+        - app.env
+        - '-d'
+        - myapp
+    distractors:
+      - '-e'
+      - '--file'
+    explanation: '--env-file принимает путь к файлу. Флаг -e ожидает пару ИМЯ=значение, а не файл, поэтому здесь он не подходит.'

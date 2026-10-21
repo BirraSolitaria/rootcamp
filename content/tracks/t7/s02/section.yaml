@@ -1,0 +1,9 @@
+id: t7.s02
+title: 'Образы'
+description: 'Откуда берутся образы, как их скачивать, из чего они состоят и как ими управлять.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

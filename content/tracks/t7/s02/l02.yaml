@@ -1,0 +1,141 @@
+id: t7.s02.l02
+title: 'docker pull и теги'
+theory:
+  title: 'Скачиваем нужную версию'
+  blocks:
+    - type: text
+      text: 'docker pull скачивает образ из реестра в локальное хранилище, но контейнер не запускает. docker run делает pull сам, если образа нет локально.'
+    - type: text
+      text: 'Тег пишется после двоеточия и обычно обозначает версию или вариант: nginx:1.27, python:3.12-slim, nginx:alpine (на базе маленького Alpine Linux). Без тега Docker подставляет latest.'
+    - type: code
+      code: |-
+        docker pull nginx:1.27
+        docker pull --platform linux/arm64 alpine
+        docker pull --all-tags alpine   # все теги (-a)
+        docker tag nginx:1.27 myweb:prod
+    - type: text
+      text: 'Тег — лишь указатель на образ. Автор может переназначить его на новую сборку, например с исправлением безопасности.'
+    - type: text
+      text: 'docker tag ИСТОЧНИК НОВОЕ_ИМЯ даёт образу ещё одно имя. Данные не копируются: оба имени указывают на один образ. Так готовят образ к push в свой репозиторий.'
+    - type: text
+      text: '--platform выбирает архитектуру, если образ собран для нескольких платформ: linux/amd64, linux/arm64.'
+tasks:
+  - id: t7.s02.l02.t01
+    type: single_choice
+    question: 'Что делает docker pull nginx:1.27?'
+    options:
+      - 'Скачивает образ и сразу запускает контейнер'
+      - 'Обновляет уже запущенный контейнер nginx'
+      - 'Ищет образ на Docker Hub и показывает описание'
+      - 'Скачивает образ с тегом 1.27, не запуская контейнер'
+    correctIndex: 3
+    explanation: 'pull только загружает образ в локальное хранилище. Запуск контейнера — отдельная команда docker run.'
+  - id: t7.s02.l02.t02
+    type: true_false
+    statement: 'После docker pull контейнер из скачанного образа запускается автоматически.'
+    answer: false
+    explanation: 'docker pull только скачивает образ. Обратное верно: docker run сам выполнит pull, если образа ещё нет локально.'
+  - id: t7.s02.l02.t03
+    type: assemble
+    prompt: 'Собери команду: скачать образ redis с тегом 7-alpine'
+    answer:
+      - docker
+      - pull
+      - 'redis:7-alpine'
+    distractors:
+      - run
+      - '-d'
+    explanation: 'Тег пишется через двоеточие прямо в имени образа. pull только скачивает образ, поэтому -d (фоновый запуск) здесь ни при чём.'
+  - id: t7.s02.l02.t04
+    type: fill_blank
+    prompt: 'Впиши команду, которая только скачивает образ, без запуска'
+    template: 'docker ___ nginx:1.27'
+    acceptedAnswers:
+      - pull
+      - 'image pull'
+    explanation: 'pull — «вытянуть» образ из реестра. docker image pull — полная форма той же команды.'
+  - id: t7.s02.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь ссылку на образ и что будет скачано'
+    pairs:
+      - left: nginx
+        right: 'nginx:latest'
+      - left: 'nginx:1.27'
+        right: 'Версия 1.27'
+      - left: 'nginx:alpine'
+        right: 'Вариант на базе Alpine Linux'
+    explanation: 'Без тега Docker подставляет latest. Остальные теги задают версию или вариант образа, например на базе маленького Alpine Linux.'
+  - id: t7.s02.l02.t06
+    type: single_choice
+    question: 'Что делает docker tag nginx:1.27 myweb:prod?'
+    options:
+      - 'Копирует все слои образа в новый образ'
+      - 'Даёт тому же образу ещё одно имя, не копируя данные'
+      - 'Переименовывает образ: старое имя nginx:1.27 исчезает'
+      - 'Отправляет образ в репозиторий myweb'
+    correctIndex: 1
+    explanation: 'docker tag создаёт новый указатель на тот же образ. Старое имя остаётся, а на диске образ хранится один раз.'
+  - id: t7.s02.l02.t07
+    type: assemble
+    prompt: 'Собери команду: дать образу nginx:1.27 новое имя myweb:prod'
+    answer:
+      - docker
+      - tag
+      - 'nginx:1.27'
+      - 'myweb:prod'
+    distractors:
+      - push
+      - cp
+    explanation: 'Сначала указывается существующий образ, затем новое имя. После этого docker image ls покажет обе строки с одинаковым ID образа.'
+  - id: t7.s02.l02.t08
+    type: true_false
+    statement: 'Через месяц тег nginx:1.27 в реестре может указывать на другую сборку образа.'
+    answer: true
+    explanation: 'Тег — изменяемый указатель. Авторы образа часто пересобирают его с исправлениями и переназначают тот же тег на новую сборку.'
+  - id: t7.s02.l02.t09
+    type: single_choice
+    question: 'Как скачать образ alpine для архитектуры arm64?'
+    options:
+      - 'docker pull --arch arm64 alpine'
+      - 'docker pull alpine:arm64-only'
+      - 'docker pull --platform linux/arm64 alpine'
+      - 'docker pull -p arm64 alpine'
+    correctIndex: 2
+    explanation: 'Флаг --platform в формате ОС/архитектура выбирает нужный вариант образа, собранного для нескольких платформ. Флага --arch у docker pull нет.'
+  - id: t7.s02.l02.t10
+    type: fill_blank
+    prompt: 'Впиши имя флага, который выбирает архитектуру образа'
+    template: 'docker pull --___ linux/arm64 alpine'
+    acceptedAnswers:
+      - platform
+    explanation: '--platform принимает значение вида linux/amd64 или linux/arm64. Без флага Docker выбирает платформу своей машины.'
+  - id: t7.s02.l02.t11
+    type: assemble
+    prompt: 'Собери команду: скачать все теги репозитория alpine'
+    answer:
+      - docker
+      - pull
+      - '--all-tags'
+      - alpine
+    altAnswers:
+      - - docker
+        - pull
+        - alpine
+        - '--all-tags'
+    distractors:
+      - '--latest'
+      - '-d'
+    explanation: '--all-tags (коротко -a) скачивает все теги репозитория. Это может быть очень много данных, поэтому обычно скачивают только нужный тег.'
+  - id: t7.s02.l02.t12
+    type: match_pairs
+    prompt: 'Сопоставь команду и её действие'
+    pairs:
+      - left: 'docker pull alpine'
+        right: 'Скачать образ из реестра'
+      - left: 'docker tag alpine me/alpine:v1'
+        right: 'Дать образу ещё одно имя'
+      - left: 'docker push me/alpine:v1'
+        right: 'Отправить образ в реестр'
+      - left: 'docker search alpine'
+        right: 'Найти образы на Docker Hub'
+    explanation: 'Типичный путь: скачать образ, дать ему имя в своём пространстве и отправить в реестр. Поиск помогает выбрать подходящий образ заранее.'

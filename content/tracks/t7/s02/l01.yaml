@@ -1,0 +1,133 @@
+id: t7.s02.l01
+title: 'Реестры и Docker Hub'
+theory:
+  title: 'Где живут образы'
+  blocks:
+    - type: text
+      text: 'Реестр (registry) — сервер, который хранит образы и раздаёт их по сети. Docker Hub (docker.io) — публичный реестр, которым Docker пользуется по умолчанию. Есть и другие: ghcr.io (GitHub), quay.io, собственный реестр компании.'
+    - type: text
+      text: 'Внутри реестра образы лежат в репозиториях. Репозиторий — набор версий одного образа с одним именем, например nginx. Версии различаются тегами: nginx:1.27, nginx:alpine. Подробнее о тегах — в следующем уроке.'
+    - type: text
+      text: 'Полное имя образа: [реестр/][пространство/]репозиторий[:тег]. Если реестр не указан, это Docker Hub. Официальные образы лежат в пространстве library, поэтому nginx — это docker.io/library/nginx:latest. Первая часть имени считается адресом реестра, если в ней есть точка, порт или это localhost.'
+    - type: code
+      code: |-
+        nginx                  # docker.io/library/nginx:latest
+        bitnami/redis          # пространство bitnami на Docker Hub
+        ghcr.io/owner/app:1.0  # реестр GitHub
+        localhost:5000/app     # локальный реестр
+    - type: text
+      text: 'docker search ищет образы на Docker Hub. docker login входит в учётную запись реестра, а docker push отправляет туда твой образ.'
+tasks:
+  - id: t7.s02.l01.t01
+    type: single_choice
+    question: 'Что такое реестр (registry)?'
+    options:
+      - 'Список контейнеров на твоём компьютере'
+      - 'Сервер, который хранит образы и раздаёт их по сети'
+      - 'Файл с инструкциями для сборки образа'
+      - 'Фоновый процесс, который запускает контейнеры'
+    correctIndex: 1
+    explanation: 'Реестр — это хранилище образов, доступное по сети. Демон скачивает оттуда образы командой pull и отправляет туда свои командой push.'
+  - id: t7.s02.l01.t02
+    type: true_false
+    statement: 'Если в имени образа не указан адрес реестра, Docker ищет образ на Docker Hub.'
+    answer: true
+    explanation: 'Docker Hub — реестр по умолчанию. Поэтому короткое имя nginx Docker раскрывает в docker.io/library/nginx:latest.'
+  - id: t7.s02.l01.t03
+    type: match_pairs
+    prompt: 'Сопоставь имя образа и откуда он берётся'
+    pairs:
+      - left: nginx
+        right: 'Официальный образ на Docker Hub (library/nginx)'
+      - left: 'bitnami/redis'
+        right: 'Пространство bitnami на Docker Hub'
+      - left: 'ghcr.io/owner/app'
+        right: 'Реестр GitHub Container Registry'
+      - left: 'localhost:5000/app'
+        right: 'Реестр на своей машине, порт 5000'
+    explanation: 'Если первая часть имени похожа на адрес (точка, порт или localhost), это реестр. Иначе образ ищется на Docker Hub, а имя без пространства означает официальный образ из library.'
+  - id: t7.s02.l01.t04
+    type: assemble
+    prompt: 'Собери команду: найти образы redis на Docker Hub'
+    answer:
+      - docker
+      - search
+      - redis
+    distractors:
+      - find
+      - hub
+    explanation: 'docker search отправляет запрос к Docker Hub и показывает подходящие репозитории с описанием и пометкой официального образа. Команды docker find не существует.'
+  - id: t7.s02.l01.t05
+    type: fill_blank
+    prompt: 'Впиши пространство, в котором лежат официальные образы Docker Hub'
+    template: 'Полное имя образа nginx: docker.io/___/nginx:latest'
+    acceptedAnswers:
+      - library
+    explanation: 'Официальные образы хранятся в пространстве library. Docker подставляет его сам, поэтому писать docker.io/library/ не нужно.'
+  - id: t7.s02.l01.t06
+    type: single_choice
+    question: 'Какой реестр Docker использует, если в имени образа реестр не указан?'
+    options:
+      - ghcr.io
+      - quay.io
+      - 'Docker Hub (docker.io)'
+      - 'localhost:5000'
+    correctIndex: 2
+    explanation: 'Docker Hub — реестр по умолчанию. Чтобы взять образ из другого реестра, его адрес нужно явно написать в начале имени.'
+  - id: t7.s02.l01.t07
+    type: assemble
+    prompt: 'Собери команду: войти в учётную запись Docker Hub'
+    answer:
+      - docker
+      - login
+    distractors:
+      - push
+      - hub
+    explanation: 'docker login запрашивает логин и пароль (или токен) и сохраняет учётные данные. Без адреса реестра вход выполняется в Docker Hub.'
+  - id: t7.s02.l01.t08
+    type: true_false
+    statement: 'Репозиторий — это один конкретный образ с одним тегом.'
+    answer: false
+    explanation: 'Репозиторий объединяет все версии образа с одним именем. Например, в репозитории nginx лежат nginx:1.27, nginx:alpine и многие другие теги.'
+  - id: t7.s02.l01.t09
+    type: single_choice
+    question: 'Как Docker понимает, что myregistry.example.com/team/api — образ не с Docker Hub?'
+    options:
+      - 'Docker сначала ищет на Docker Hub, а если не нашёл — во всех других реестрах'
+      - 'По первой части имени: в ней есть точка, значит это адрес реестра'
+      - 'Это задаётся флагом --registry'
+      - 'Имя образа не может содержать точку, поэтому будет ошибка'
+    correctIndex: 1
+    explanation: 'Если первая часть имени содержит точку, порт или равна localhost, Docker считает её адресом реестра. Перебора реестров нет: где искать, определяет только имя.'
+  - id: t7.s02.l01.t10
+    type: match_pairs
+    prompt: 'Сопоставь термин и его смысл'
+    pairs:
+      - left: 'Реестр'
+        right: 'Сервер, который хранит и раздаёт образы'
+      - left: 'Репозиторий'
+        right: 'Набор версий образа с одним именем'
+      - left: 'Тег'
+        right: 'Метка версии внутри репозитория'
+      - left: 'Docker Hub'
+        right: 'Публичный реестр по умолчанию'
+    explanation: 'Иерархия такая: реестр содержит репозитории, а в репозитории версии различаются тегами. Docker Hub — просто самый известный реестр.'
+  - id: t7.s02.l01.t11
+    type: fill_blank
+    prompt: 'Впиши команду, которая отправляет образ в реестр'
+    template: 'docker ___ myuser/app:1.0'
+    acceptedAnswers:
+      - push
+      - 'image push'
+    explanation: 'push — «протолкнуть» образ в реестр, обратное действие к pull. Пространство myuser в имени говорит, в чей аккаунт на Docker Hub отправить образ.'
+  - id: t7.s02.l01.t12
+    type: assemble
+    prompt: 'Собери команду: отправить образ myuser/app:1.0 в реестр'
+    answer:
+      - docker
+      - push
+      - 'myuser/app:1.0'
+    distractors:
+      - upload
+      - login
+    explanation: 'docker push отправляет образ в реестр, указанный в имени; здесь это Docker Hub, аккаунт myuser. Перед этим нужно войти через docker login.'

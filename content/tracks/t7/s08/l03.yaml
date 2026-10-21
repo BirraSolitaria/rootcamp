@@ -1,0 +1,145 @@
+id: t7.s08.l03
+title: 'ports, environment, volumes'
+theory:
+  title: 'Порты, переменные и данные'
+  blocks:
+    - type: code
+      code: |-
+        services:
+          db:
+            image: postgres:16
+            environment:
+              POSTGRES_PASSWORD: example
+            volumes:
+              - dbdata:/var/lib/postgresql/data
+          web:
+            image: nginx:1.27
+            ports:
+              - "8080:80"
+              - "127.0.0.1:8443:443"
+            env_file: web.env
+            volumes:
+              - ./site:/usr/share/nginx/html:ro
+        volumes:
+          dbdata:
+    - type: text
+      text: 'ports работает как -p: "ХОСТ:КОНТЕЙНЕР". Порты пишут в кавычках, чтобы YAML не прочитал xx:yy как число. environment — как -e (словарь или список - KEY=value), env_file читает переменные для контейнера из файла.'
+    - type: text
+      text: 'Файл .env рядом с compose.yaml служит другому: подставляет ${VAR} в сам compose.yaml, например image: myapp:${TAG}. Итог проверяет docker compose config.'
+    - type: text
+      text: 'volumes сервиса: имя:путь — именованный том, ./путь:путь — bind mount (считается от папки с compose.yaml), :ro — только чтение. Именованный том нужно объявить в верхнем ключе volumes.'
+tasks:
+  - id: t7.s08.l03.t01
+    type: single_choice
+    question: 'Что значит "8080:80" в ports?'
+    options:
+      - 'Порт 80 хоста ведёт на порт 8080 контейнера'
+      - 'Порт 8080 хоста ведёт на порт 80 контейнера'
+      - 'Контейнер слушает оба порта'
+      - 'Открыть порты с 80 по 8080'
+    correctIndex: 1
+    explanation: 'Как и в -p, слева порт хоста, справа порт в контейнере. Запрос на localhost:8080 попадёт в nginx на 80.'
+  - id: t7.s08.l03.t02
+    type: true_false
+    statement: 'Именованный том из volumes сервиса нужно объявить и в верхнем ключе volumes.'
+    answer: true
+    explanation: 'Верхний volumes говорит Compose создать том проекта. Без объявления Compose сообщит об ошибке: сервис ссылается на неизвестный том.'
+  - id: t7.s08.l03.t03
+    type: assemble
+    prompt: 'Собери строку compose.yaml: переменная POSTGRES_DB со значением shop в форме словаря'
+    answer:
+      - 'POSTGRES_DB:'
+      - shop
+    distractors:
+      - '='
+      - '-e'
+    explanation: 'В словарной форме environment переменная записывается как «ключ: значение». Форма со знаком = используется в списке.'
+  - id: t7.s08.l03.t04
+    type: fill_blank
+    prompt: 'Впиши ключ сервиса, который читает переменные для контейнера из файла'
+    template: '    ___: web.env'
+    acceptedAnswers:
+      - env_file
+    explanation: 'env_file передаёт контейнеру все переменные из файла, как docker run --env-file. Так длинные настройки не загромождают compose.yaml.'
+  - id: t7.s08.l03.t05
+    type: match_pairs
+    prompt: 'Сопоставь ключ сервиса и флаг docker run'
+    pairs:
+      - left: ports
+        right: 'Публикация портов, как -p'
+      - left: environment
+        right: 'Переменные, как -e'
+      - left: volumes
+        right: 'Тома и bind mounts, как -v'
+      - left: env_file
+        right: 'Переменные из файла, как --env-file'
+    explanation: 'compose.yaml — по сути записанные флаги docker run, которые не нужно набирать каждый раз.'
+  - id: t7.s08.l03.t06
+    type: single_choice
+    question: 'Чем файл .env рядом с compose.yaml отличается от env_file?'
+    options:
+      - 'Ничем, это одно и то же'
+      - '.env подставляет ${VAR} в compose.yaml, env_file передаёт переменные в контейнер'
+      - '.env передаёт переменные в Dockerfile, env_file — в compose.yaml'
+      - '.env работает только в Windows'
+    correctIndex: 1
+    explanation: '.env читает сам Compose, чтобы заполнить ${VAR} в файле. env_file читается для конкретного сервиса, и переменные оказываются внутри контейнера.'
+  - id: t7.s08.l03.t07
+    type: true_false
+    statement: 'Относительный путь ./site в bind mount считается от папки, где лежит compose.yaml, а не от папки, где запущена команда.'
+    answer: true
+    explanation: 'Пути в compose.yaml отсчитываются от папки проекта. Поэтому файл работает одинаково, откуда бы ты его ни запустил.'
+  - id: t7.s08.l03.t08
+    type: assemble
+    prompt: 'Собери команду: показать итоговую конфигурацию проекта после подстановки переменных'
+    answer:
+      - docker
+      - compose
+      - config
+    distractors:
+      - inspect
+      - show
+    explanation: 'config разбирает файл, подставляет ${VAR} и печатает результат. Удобно проверить, что переменные подставились правильно.'
+  - id: t7.s08.l03.t09
+    type: single_choice
+    question: 'Почему порты в compose.yaml пишут в кавычках?'
+    options:
+      - 'Без кавычек Compose не публикует порт'
+      - 'Чтобы YAML не прочитал значение вида xx:yy как число'
+      - 'Кавычки делают порт доступным только локально'
+      - 'Так быстрее работает сеть'
+    correctIndex: 1
+    explanation: 'Некоторые парсеры YAML читают числа через двоеточие как одно число по основанию 60. Строка в кавычках всегда остаётся строкой.'
+  - id: t7.s08.l03.t10
+    type: fill_blank
+    prompt: 'Впиши суффикс, который делает bind mount только для чтения'
+    template: '- ./site:/usr/share/nginx/html:___'
+    acceptedAnswers:
+      - ro
+    explanation: ':ro запрещает контейнеру менять файлы. Сайт только читается, поэтому лишние права ему не нужны.'
+  - id: t7.s08.l03.t11
+    type: match_pairs
+    prompt: 'Сопоставь запись и её смысл'
+    pairs:
+      - left: 'dbdata:/var/lib/postgresql/data'
+        right: 'Именованный том'
+      - left: './site:/usr/share/nginx/html'
+        right: 'Bind mount папки хоста'
+      - left: './site:/usr/share/nginx/html:ro'
+        right: 'Bind mount только для чтения'
+      - left: '"127.0.0.1:8443:443"'
+        right: 'Порт доступен только с самого хоста'
+    explanation: 'Путь с ./ или / слева — папка хоста, просто имя — том. Адрес перед портом ограничивает, на каком интерфейсе хоста он открыт.'
+  - id: t7.s08.l03.t12
+    type: assemble
+    prompt: 'Собери docker run, равный сервису с image: nginx:1.27 и ports: "8080:80"'
+    answer:
+      - docker
+      - run
+      - '-p'
+      - '8080:80'
+      - 'nginx:1.27'
+    distractors:
+      - '-v'
+      - '80:8080'
+    explanation: 'ports превращается в -p с тем же порядком: хост слева, контейнер справа. Флаги docker run идут до имени образа.'

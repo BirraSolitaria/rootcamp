@@ -1,0 +1,135 @@
+id: t7.s06.l02
+title: 'COPY, ADD и WORKDIR'
+theory:
+  title: 'Кладём файлы в образ'
+  blocks:
+    - type: text
+      text: 'COPY ИСТОЧНИК НАЗНАЧЕНИЕ копирует файлы из контекста сборки (папки, переданной docker build) в образ. Если назначение кончается на /, это папка.'
+    - type: code
+      code: |-
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY requirements.txt .
+        RUN pip install -r requirements.txt
+        COPY . .
+        COPY --chown=app:app config/ /app/config/
+    - type: text
+      text: 'WORKDIR задаёт рабочую папку для следующих инструкций RUN, COPY, CMD и для запущенного контейнера, создавая её при необходимости. Относительные пути вроде . считаются от неё.'
+    - type: text
+      text: 'RUN cd /app не поможет: каждый RUN запускается заново, и смена папки не переживает инструкцию.'
+    - type: text
+      text: 'ADD копирует файлы, как COPY, но вдобавок умеет скачивать файл по URL и автоматически распаковывать локальный tar-архив. Из-за этой неявной магии советуют использовать COPY, а ADD — только когда нужна распаковка.'
+    - type: text
+      text: '--chown=пользователь:группа у COPY сразу задаёт владельца файлов.'
+tasks:
+  - id: t7.s06.l02.t01
+    type: single_choice
+    question: 'Что делает COPY . /app?'
+    options:
+      - 'Копирует файлы из /app на хост'
+      - 'Копирует всё содержимое контекста сборки в папку /app образа'
+      - 'Монтирует текущую папку в контейнер'
+      - 'Копирует образ в папку /app'
+    correctIndex: 1
+    explanation: 'Точка — корень контекста сборки. COPY берёт файлы оттуда и кладёт их в образ, создавая новый слой.'
+  - id: t7.s06.l02.t02
+    type: true_false
+    statement: 'RUN cd /app меняет папку для всех следующих инструкций RUN.'
+    answer: false
+    explanation: 'Каждый RUN выполняется в новой оболочке, и cd действует только внутри неё. Для постоянной рабочей папки есть WORKDIR.'
+  - id: t7.s06.l02.t03
+    type: assemble
+    prompt: 'Собери строку Dockerfile: сделать /app рабочей папкой'
+    answer:
+      - 'WORKDIR'
+      - '/app'
+    distractors:
+      - cd
+      - 'RUN'
+    explanation: 'WORKDIR действует на все следующие инструкции и на запущенный контейнер, а если папки нет, создаёт её.'
+  - id: t7.s06.l02.t04
+    type: fill_blank
+    prompt: 'Впиши рекомендуемую инструкцию для копирования локального файла'
+    template: '___ package.json ./   # без лишней магии ADD'
+    acceptedAnswers:
+      - 'COPY'
+    explanation: 'COPY делает ровно одно — копирует файлы из контекста. Поэтому его поведение предсказуемее, чем у ADD.'
+  - id: t7.s06.l02.t05
+    type: match_pairs
+    prompt: 'Сопоставь инструкцию и что она делает'
+    pairs:
+      - left: 'COPY'
+        right: 'Копирует файлы из контекста'
+      - left: 'ADD'
+        right: 'Ещё умеет URL и распаковку tar'
+      - left: 'WORKDIR'
+        right: 'Задаёт рабочую папку'
+      - left: 'COPY --chown'
+        right: 'Копирует и задаёт владельца'
+    explanation: 'COPY и ADD добавляют файлы в слой, а WORKDIR меняет только настройки. --chown избавляет от отдельного RUN chown и лишнего слоя.'
+  - id: t7.s06.l02.t06
+    type: single_choice
+    question: 'Когда уместно выбрать ADD вместо COPY?'
+    options:
+      - 'Всегда, ADD быстрее'
+      - 'Когда копируешь один файл'
+      - 'Когда нужно задать рабочую папку'
+      - 'Когда нужно автоматически распаковать локальный tar-архив'
+    correctIndex: 3
+    explanation: 'Автоматическая распаковка — главное, что умеет только ADD. Для обычного копирования COPY понятнее и не делает ничего неожиданного.'
+  - id: t7.s06.l02.t07
+    type: true_false
+    statement: 'WORKDIR создаёт папку, если её ещё нет.'
+    answer: true
+    explanation: 'Не нужно писать RUN mkdir: WORKDIR сам создаст папку и сделает её текущей для следующих инструкций.'
+  - id: t7.s06.l02.t08
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать весь контекст в /app, сделав владельцем app:app'
+    answer:
+      - 'COPY'
+      - '--chown=app:app'
+      - '.'
+      - '/app'
+    distractors:
+      - '--owner=app'
+      - 'RUN'
+    explanation: 'Флаг --chown пишется сразу после COPY, до путей. Флага --owner у COPY нет.'
+  - id: t7.s06.l02.t09
+    type: single_choice
+    question: 'После WORKDIR /app идёт COPY . . — куда попадут файлы?'
+    options:
+      - 'В корень образа /'
+      - 'В домашнюю папку root'
+      - 'В /app'
+      - 'В папку контекста на хосте'
+    correctIndex: 2
+    explanation: 'Вторая точка — относительный путь назначения, а он считается от рабочей папки. После WORKDIR /app это /app.'
+  - id: t7.s06.l02.t10
+    type: fill_blank
+    prompt: 'Впиши инструкцию, которая распакует архив при сборке'
+    template: '___ app.tar.gz /opt/app/   # распаковать в /opt/app'
+    acceptedAnswers:
+      - 'ADD'
+    explanation: 'ADD узнаёт локальный tar-архив и распаковывает его содержимое. COPY положил бы архив как обычный файл.'
+  - id: t7.s06.l02.t11
+    type: match_pairs
+    prompt: 'Сопоставь инструкцию COPY и куда попадут файлы'
+    pairs:
+      - left: 'COPY app.py /app/'
+        right: 'Файл /app/app.py'
+      - left: 'COPY . . после WORKDIR /src'
+        right: 'Весь контекст в /src'
+      - left: 'COPY src/ /app/src/'
+        right: 'Содержимое папки src в /app/src'
+    explanation: 'Если назначение кончается на /, это папка. Относительное назначение считается от WORKDIR, а у папки-источника копируется содержимое.'
+  - id: t7.s06.l02.t12
+    type: assemble
+    prompt: 'Собери строку Dockerfile: скопировать requirements.txt в текущую рабочую папку'
+    answer:
+      - 'COPY'
+      - requirements.txt
+      - '.'
+    distractors:
+      - '/'
+      - 'RUN'
+    explanation: 'Точка в назначении — текущая рабочая папка из WORKDIR. Назначение / положило бы файл в корень образа.'

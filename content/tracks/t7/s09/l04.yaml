@@ -1,0 +1,151 @@
+id: t7.s09.l04
+title: 'stats, top, events'
+theory:
+  title: 'Что происходит прямо сейчас'
+  blocks:
+    - type: code
+      code: |-
+        docker stats                   # ресурсы всех контейнеров вживую
+        docker stats --no-stream web    # один снимок и выход
+        docker top web                 # процессы контейнера
+        docker events                  # поток событий
+        docker events --since 1h --filter container=web
+        docker events --filter event=die
+    - type: text
+      text: 'docker stats показывает потребление: CPU %, MEM USAGE / LIMIT, MEM %, NET I/O (сеть), BLOCK I/O (диск), PIDS (число процессов). Без лимита -m в LIMIT видна вся память хоста. --no-stream печатает одну таблицу — удобно в скриптах.'
+    - type: text
+      text: 'docker top выводит процессы контейнера так, как их видит хост, без захода внутрь. Он работает, даже если в образе нет программы ps.'
+    - type: text
+      text: 'docker events выводит события демона: create, start, die, kill, oom, health_status и другие. Без флагов команда показывает только новые события с момента запуска, --since добавляет недавние. Событие die с exitCode помогает поймать контейнер, который падает и перезапускается.'
+tasks:
+  - id: t7.s09.l04.t01
+    type: single_choice
+    question: 'Какая команда покажет, сколько памяти и CPU потребляет контейнер прямо сейчас?'
+    options:
+      - 'docker top'
+      - 'docker stats'
+      - 'docker events'
+      - 'docker inspect'
+    correctIndex: 1
+    explanation: 'stats обновляет таблицу ресурсов в реальном времени. top показывает процессы, events — события, inspect — настройки.'
+  - id: t7.s09.l04.t02
+    type: true_false
+    statement: 'docker top работает, даже если внутри образа нет программы ps.'
+    answer: true
+    explanation: 'docker top собирает список процессов на стороне хоста. Программы внутри контейнера ему не нужны.'
+  - id: t7.s09.l04.t03
+    type: assemble
+    prompt: 'Собери команду: один снимок потребления ресурсов контейнера web'
+    answer:
+      - docker
+      - stats
+      - '--no-stream'
+      - web
+    altAnswers:
+      - - docker
+        - stats
+        - web
+        - '--no-stream'
+    distractors:
+      - '--once'
+      - top
+    explanation: '--no-stream печатает таблицу один раз и завершается. Флага --once нет.'
+  - id: t7.s09.l04.t04
+    type: fill_blank
+    prompt: 'Впиши событие, которое Docker шлёт, когда главный процесс контейнера завершился'
+    template: 'docker events --filter event=___'
+    acceptedAnswers:
+      - die
+    explanation: 'die приходит при любом завершении главного процесса и содержит exitCode. Фильтр оставляет только такие события.'
+  - id: t7.s09.l04.t05
+    type: match_pairs
+    prompt: 'Сопоставь команду и что она показывает'
+    pairs:
+      - left: 'docker stats'
+        right: 'Ресурсы в реальном времени'
+      - left: 'docker top'
+        right: 'Процессы контейнера'
+      - left: 'docker events'
+        right: 'Поток событий демона'
+      - left: 'docker logs'
+        right: 'Вывод приложения'
+    explanation: 'Каждая команда отвечает на свой вопрос: сколько ресурсов, какие процессы, что случилось с контейнером и что сказало приложение.'
+  - id: t7.s09.l04.t06
+    type: single_choice
+    question: 'В docker stats у контейнера MEM LIMIT равен всей памяти хоста. Почему?'
+    options:
+      - 'Контейнеру не задан лимит памяти -m'
+      - 'docker stats всегда так показывает'
+      - 'Контейнер упал'
+      - 'Включена сеть host'
+    correctIndex: 0
+    explanation: 'Без -m контейнер может занять всю память хоста, и это видно в LIMIT. С -m 512m там будет 512MiB.'
+  - id: t7.s09.l04.t07
+    type: true_false
+    statement: 'Без флагов docker events печатает только новые события, начиная с момента запуска команды.'
+    answer: true
+    explanation: 'events по умолчанию ждёт будущих событий. Чтобы увидеть недавние, добавляют --since.'
+  - id: t7.s09.l04.t08
+    type: assemble
+    prompt: 'Собери команду: показать события контейнера web за последний час'
+    answer:
+      - docker
+      - events
+      - '--since'
+      - '1h'
+      - '--filter'
+      - 'container=web'
+    altAnswers:
+      - - docker
+        - events
+        - '--filter'
+        - 'container=web'
+        - '--since'
+        - '1h'
+    distractors:
+      - logs
+      - '--tail'
+    explanation: '--since 1h показывает события за час, --filter container=web оставляет только нужный контейнер. Порядок флагов не важен.'
+  - id: t7.s09.l04.t09
+    type: single_choice
+    question: 'Контейнер перезапускается по кругу. Какая команда в реальном времени покажет каждое его завершение с кодом выхода?'
+    options:
+      - 'docker events --filter event=die'
+      - 'docker stats'
+      - 'docker top app'
+      - 'docker ps'
+    correctIndex: 0
+    explanation: 'Событие die приходит при каждом завершении и содержит exitCode. stats и top показывают текущее состояние, а не историю падений.'
+  - id: t7.s09.l04.t10
+    type: fill_blank
+    prompt: 'Впиши флаг: вывести одну таблицу и завершиться'
+    template: 'docker stats ___'
+    acceptedAnswers:
+      - '--no-stream'
+    explanation: 'Без флага stats обновляется, пока не нажмёшь Ctrl+C. Для скриптов и отчётов нужен один снимок.'
+  - id: t7.s09.l04.t11
+    type: match_pairs
+    prompt: 'Сопоставь колонку docker stats и её смысл'
+    pairs:
+      - left: 'CPU %'
+        right: 'Загрузка процессора'
+      - left: 'MEM USAGE / LIMIT'
+        right: 'Занятая память и лимит'
+      - left: 'NET I/O'
+        right: 'Сетевой трафик'
+      - left: 'BLOCK I/O'
+        right: 'Чтение и запись диска'
+      - left: 'PIDS'
+        right: 'Число процессов'
+    explanation: 'Быстро растущие MEM или PIDS часто выдают утечку памяти или бесконечное порождение процессов.'
+  - id: t7.s09.l04.t12
+    type: assemble
+    prompt: 'Собери команду: показать процессы внутри контейнера db'
+    answer:
+      - docker
+      - top
+      - db
+    distractors:
+      - stats
+      - logs
+    explanation: 'top получает список процессов контейнера со стороны хоста. stats показал бы ресурсы, а logs — вывод приложения.'

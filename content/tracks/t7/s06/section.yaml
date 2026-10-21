@@ -1,0 +1,9 @@
+id: t7.s06
+title: 'Dockerfile'
+description: 'Как описать сборку образа в Dockerfile и собрать его командой docker build.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

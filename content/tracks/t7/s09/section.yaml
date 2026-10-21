@@ -1,0 +1,9 @@
+id: t7.s09
+title: 'Отладка'
+description: 'Как найти причину проблемы: логи, оболочка внутри, inspect, коды выхода и частые ошибки.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05

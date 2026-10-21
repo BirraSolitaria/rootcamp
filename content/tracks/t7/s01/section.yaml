@@ -1,0 +1,9 @@
+id: t7.s01
+title: 'Что такое контейнер'
+description: 'Чем контейнер отличается от виртуальной машины, что такое образ и как устроен Docker Engine.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05
