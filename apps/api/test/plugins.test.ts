@@ -18,8 +18,8 @@ const h = useHarness({
   appFactory: async (d) => {
     const deps = harnessAppDeps(d);
     const app = await buildApp(deps);
-    // Stub routes: `/api/progress` stands for any protected endpoint (M3 adds the real one).
-    app.get('/api/progress', async (req) => ({ userId: req.user!.id }));
+    // Stub routes: `/api/__protected` stands for any protected endpoint.
+    app.get('/api/__protected', async (req) => ({ userId: req.user!.id }));
     if (!app.hasRoute({ method: 'PATCH', url: '/api/me' })) {
       app.patch('/api/me', async (req) => ({ userId: req.user!.id }));
     }
@@ -102,7 +102,7 @@ describe('csrf', () => {
 
 describe('session', () => {
   it('protected route without a cookie → 401 unauthorized', async () => {
-    const res = await h().app.inject({ method: 'GET', url: '/api/progress' });
+    const res = await h().app.inject({ method: 'GET', url: '/api/__protected' });
     expect(res.statusCode).toBe(401);
     expect(errorOf(res).code).toBe('unauthorized');
   });
@@ -110,7 +110,7 @@ describe('session', () => {
   it('unknown token → 401', async () => {
     const res = await h().app.inject({
       method: 'GET',
-      url: '/api/progress',
+      url: '/api/__protected',
       cookies: { rc_sid: 'nope' },
     });
     expect(res.statusCode).toBe(401);
@@ -118,7 +118,7 @@ describe('session', () => {
 
   it('valid session sets request.user', async () => {
     const { user, cookie } = await makeUser();
-    const res = await h().app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    const res = await h().app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ userId: user.id });
   });
@@ -127,7 +127,7 @@ describe('session', () => {
     const { cookie, token } = await makeUser();
     const { app, clock, db } = h();
     clock.advance(SESSION_TTL_MS + 1);
-    const res = await app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    const res = await app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.statusCode).toBe(401);
     expect(errorOf(res).code).toBe('unauthorized');
     const id = createHash('sha256').update(token).digest('hex');
@@ -141,13 +141,13 @@ describe('session', () => {
     const created = clock.now();
 
     clock.advance(RENEW_AFTER_MS); // exactly 1 h: no renewal yet
-    let res = await app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    let res = await app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.headers['set-cookie']).toBeUndefined();
     let [s] = await db.select().from(sessions);
     expect(s!.expiresAt.getTime()).toBe(created + SESSION_TTL_MS);
 
     clock.advance(1);
-    res = await app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    res = await app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.statusCode).toBe(200);
     [s] = await db.select().from(sessions);
     expect(s!.expiresAt.getTime()).toBe(clock.now() + SESSION_TTL_MS);
@@ -158,7 +158,7 @@ describe('session', () => {
     const { cookie, user } = await makeUser({ status: 'banned' });
     const { app, db, clock } = h();
     await createSession(db, user.id, null, null, clock.now());
-    const res = await app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    const res = await app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.statusCode).toBe(403);
     expect(errorOf(res).code).toBe('banned');
     expect(await db.select().from(sessions)).toEqual([]);
@@ -194,9 +194,9 @@ describe('session', () => {
 });
 
 describe('verified guard', () => {
-  it('unverified user: GET /api/progress → 403 email_unverified', async () => {
+  it('unverified user: GET /api/__protected → 403 email_unverified', async () => {
     const { cookie } = await makeUser({ verified: false });
-    const res = await h().app.inject({ method: 'GET', url: '/api/progress', cookies: cookie });
+    const res = await h().app.inject({ method: 'GET', url: '/api/__protected', cookies: cookie });
     expect(res.statusCode).toBe(403);
     expect(errorOf(res).code).toBe('email_unverified');
   });

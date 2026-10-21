@@ -34,6 +34,22 @@ export const TEST_PUBLIC_ORIGIN = 'http://127.0.0.1:8080';
 type Sql = DbHandle['sql'];
 
 const START_TIMEOUT_MS = 180_000;
+/** `reset()` between tests; TRUNCATE of every table is I/O-bound on small VPS disks. */
+const RESET_TIMEOUT_MS = 60_000;
+
+/**
+ * Throwaway database: no durability. TRUNCATE (every reset) creates new relation files and
+ * fsyncs them; with fsync on, a reset took 1-10 s on the VPS test host.
+ */
+export const POSTGRES_TEST_COMMAND = [
+  'postgres',
+  '-c',
+  'fsync=off',
+  '-c',
+  'synchronous_commit=off',
+  '-c',
+  'full_page_writes=off',
+];
 
 export interface MailpitMessage {
   id: string;
@@ -295,7 +311,7 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
   let handle: DbHandle | undefined;
   try {
     [pg, mailpit] = await Promise.all([
-      new PostgreSqlContainer(POSTGRES_IMAGE).start(),
+      new PostgreSqlContainer(POSTGRES_IMAGE).withCommand(POSTGRES_TEST_COMMAND).start(),
       new GenericContainer(MAILPIT_IMAGE)
         .withExposedPorts(1025, 8025)
         // Without this Mailpit reverse-resolves every SMTP client and greets ~1 s late.
@@ -373,7 +389,7 @@ export function useHarness(opts: HarnessOpts = {}): () => Harness {
   }, START_TIMEOUT_MS);
   beforeEach(async () => {
     await harness?.reset();
-  });
+  }, RESET_TIMEOUT_MS);
   afterAll(async () => {
     await harness?.close();
   }, 60_000);
