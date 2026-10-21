@@ -1,0 +1,35 @@
+{
+  "name": "import-dockerlingo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off converter: DockerLingo unit JSON → rootcamp content YAML.",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "rootcamp-src": "./src/convert.ts",
+      "types": "./dist/convert.d.ts",
+      "default": "./dist/convert.js"
+    }
+  },
+  "scripts": {
+    "start": "tsx --conditions=rootcamp-src src/cli.ts",
+    "build": "tsc -b tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rootcamp/content-schema": "workspace:*",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
