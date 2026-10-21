@@ -1,0 +1,10 @@
+id: t1
+order: 1
+title: 'Linux и терминал'
+description: 'Основа работы DevOps-инженера: терминал и оболочка bash, файлы, права, процессы и сервисы Linux.'
+status: partial
+prerequisites:
+  - t0
+reviewedAt: '2026-10-21'
+sections:
+  - s01

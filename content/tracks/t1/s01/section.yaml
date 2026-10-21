@@ -1,0 +1,9 @@
+id: t1.s01
+title: 'Терминал и оболочка'
+description: 'Приглашение, команды и аргументы, флаги, man и --help, история и автодополнение.'
+nodes:
+  - lesson: l01
+  - lesson: l02
+  - lesson: l03
+  - lesson: l04
+  - lesson: l05
