@@ -1,0 +1,210 @@
+/* Hearts */
+.hearts {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.heartsValue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--coral);
+  font: 700 15px/20px var(--font-mono);
+}
+
+.heartsEmpty {
+  color: var(--muted);
+}
+
+.heartsTimer {
+  font: 400 12px/16px var(--font-mono);
+  color: var(--muted);
+}
+
+/* Progress */
+.progress {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--teal);
+  transition: width 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+}
+
+/* Theory card */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.theory {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.kicker {
+  margin-bottom: calc(-1 * var(--space-sm));
+  font: 400 13px/18px var(--font-mono);
+  color: var(--amber);
+}
+
+.theoryTitle {
+  font: 700 26px/33px var(--font-display);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.theoryText {
+  font: 400 17px/26px var(--font-sans);
+  color: var(--ink);
+}
+
+.codeWindow {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--term);
+}
+
+.codeBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.codeBar span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.codeText {
+  margin: 0;
+  padding: var(--space-lg);
+  overflow-x: auto;
+  font: 400 14px/21px var(--font-mono);
+  color: var(--ink);
+}
+
+.screenFooter {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.wide {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* Out of hearts, summary */
+.outOfHearts,
+.summary {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+}
+
+.outTitle,
+.summaryTitle {
+  font: 700 26px/33px var(--font-display);
+}
+
+.outTitle {
+  color: var(--coral);
+}
+
+.summaryTitle {
+  color: var(--teal);
+}
+
+.outTimer {
+  font: 700 15px/22px var(--font-mono);
+  color: var(--ink);
+}
+
+.muted {
+  font: 400 15px/22px var(--font-sans);
+  color: var(--muted);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-sm);
+  width: 100%;
+  margin-top: var(--space-lg);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-sm);
+  width: 100%;
+  margin: var(--space-sm) 0 0;
+}
+
+.stat {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.statAccent {
+  border-color: var(--amber);
+}
+
+.statLabel {
+  font: 500 13px/18px var(--font-mono);
+  color: var(--muted);
+}
+
+.statValue {
+  margin: 0;
+  font: 700 18px/24px var(--font-mono);
+  color: var(--ink);
+}
+
+.statAccent .statValue {
+  color: var(--amber);
+}
+
+.goal {
+  font: 600 16px/24px var(--font-sans);
+  color: var(--teal);
+}

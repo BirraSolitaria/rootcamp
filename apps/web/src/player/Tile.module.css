@@ -1,0 +1,128 @@
+.tile {
+  --face: var(--surface);
+  --edge-c: var(--edge);
+  --text: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--touch);
+  padding: var(--space-md) 14px;
+  border: 1px solid var(--edge-c);
+  border-bottom-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--face);
+  color: var(--text);
+  font: 500 16px/21px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 80ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.tile:not(:disabled):active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+  margin-bottom: 2px;
+}
+
+.tile:not(:disabled):hover {
+  --face: var(--surface-hi);
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font: 700 15px/20px var(--font-mono);
+}
+
+.hint {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 500 12px/1 var(--font-mono);
+}
+
+.idle {
+  /* defaults */
+}
+
+.selected {
+  --face: var(--surface-hi);
+  --edge-c: var(--amber);
+  --text: var(--amber);
+}
+
+.selected .hint {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.wrong {
+  --edge-c: var(--coral);
+  --text: var(--coral);
+}
+
+.pair0 {
+  --face: #183634;
+  --edge-c: var(--teal);
+  --text: #7fe6d1;
+}
+.pair1 {
+  --face: #2a2a3a;
+  --edge-c: var(--amber);
+  --text: #ffd08a;
+}
+.pair2 {
+  --face: #2a2547;
+  --edge-c: #a78bfa;
+  --text: #cbb8ff;
+}
+.pair3 {
+  --face: #33233a;
+  --edge-c: #f472b6;
+  --text: #f9a8d4;
+}
+.pair4 {
+  --face: #1a2c48;
+  --edge-c: #60a5fa;
+  --text: #a7cbff;
+}
+
+.pair0:not(:disabled):hover,
+.pair1:not(:disabled):hover,
+.pair2:not(:disabled):hover,
+.pair3:not(:disabled):hover,
+.pair4:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.ghost {
+  border-color: var(--surface);
+  background: var(--surface);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ghost .label {
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: none;
+  }
+}
