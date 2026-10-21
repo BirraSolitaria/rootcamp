@@ -50,7 +50,7 @@ export function Reset() {
           name="password"
           type="password"
           autoComplete="new-password"
-          hint="Не меньше 10 символов"
+          hint="Не меньше 8 символов"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const Email = z.email();
-/** New passwords: 10–128 characters. */
-export const Password = z.string().min(10).max(128);
+/** New passwords: 8–128 characters. */
+export const Password = z.string().min(8).max(128);
 /** Existing password as typed by the user: only bounded, never policy-checked. */
 const PasswordInput = z.string().min(1).max(128);
 export const Nick = z.string().regex(/^[a-z0-9_.]{3,20}$/);

@@ -82,9 +82,10 @@ test('ApiError accepts known codes, optional runId, rejects unknown codes', () =
   expect(ApiError.safeParse({ error: { code: 'nope', message: 'x' } }).success).toBe(false);
 });
 
-test('RegisterBody: password length 10..128', () => {
+test('RegisterBody: password length 8..128', () => {
   expect(RegisterBody.safeParse(register).success).toBe(true);
-  expect(RegisterBody.safeParse({ ...register, password: '123456789' }).success).toBe(false);
+  expect(RegisterBody.safeParse({ ...register, password: '1234567' }).success).toBe(false);
+  expect(RegisterBody.safeParse({ ...register, password: '12345678' }).success).toBe(true);
   expect(RegisterBody.safeParse({ ...register, password: 'a'.repeat(128) }).success).toBe(true);
   expect(RegisterBody.safeParse({ ...register, password: 'a'.repeat(129) }).success).toBe(false);
 });
@@ -110,10 +111,10 @@ test('auth bodies', () => {
   expect(ForgotBody.safeParse({}).success).toBe(false);
   expect(VerifyBody.safeParse({ token: 'abc' }).success).toBe(true);
   expect(VerifyBody.safeParse({ token: '' }).success).toBe(false);
-  expect(ResetBody.safeParse({ token: 'abc', password: '1234567890' }).success).toBe(true);
-  expect(ResetBody.safeParse({ token: 'abc', password: 'short' }).success).toBe(false);
-  expect(ChangePasswordBody.safeParse({ current: 'old', next: '1234567890' }).success).toBe(true);
-  expect(ChangePasswordBody.safeParse({ current: 'old', next: 'short' }).success).toBe(false);
+  expect(ResetBody.safeParse({ token: 'abc', password: '12345678' }).success).toBe(true);
+  expect(ResetBody.safeParse({ token: 'abc', password: '1234567' }).success).toBe(false);
+  expect(ChangePasswordBody.safeParse({ current: 'old', next: '12345678' }).success).toBe(true);
+  expect(ChangePasswordBody.safeParse({ current: 'old', next: '1234567' }).success).toBe(false);
 });
 
 test('PatchMeBody: reminderTime is HH:MM', () => {

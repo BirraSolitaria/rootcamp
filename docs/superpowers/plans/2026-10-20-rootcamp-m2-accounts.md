@@ -16,7 +16,7 @@
 - Ошибки API: `{ error: { code, message } }`, `code` только из `ErrorCode` в `packages/api-contract`.
 - Мутирующие запросы требуют `X-RC: 1` и `Origin`, равный `PUBLIC_ORIGIN`; иначе `403 csrf`.
 - Cookie `rc_sid`: HttpOnly, Secure (выключается только `COOKIE_SECURE=false` в dev/e2e), SameSite=Lax, 30 дней, продление при активности.
-- Пароль 10–128 символов; ник `^[a-z0-9_.]{3,20}$`; email — citext unique.
+- Пароль 8–128 символов; ник `^[a-z0-9_.]{3,20}$`; email — citext unique.
 - Ссылка `verify` живёт 24 ч, `reset` — 1 ч, обе одноразовые; `reset` удаляет все сессии пользователя.
 - Лимиты: `login` 5/мин на IP и 20/ч на email; `register` 3/ч на IP; `forgot` 3/ч на IP; `resend-verification` 1/мин и 5/сутки на пользователя; прочее API 300/мин на пользователя.
 - Миграции только расширяющие.
@@ -65,7 +65,7 @@ infra/compose.e2e.yaml, e2e/{playwright.config.ts,helpers/mailpit.ts,specs/01-re
   - `ApiError { error: { code: ErrorCode; message: string; runId?: string } }`.
   - zod-схемы тел и ответов: `RegisterBody {email, nick, password, tz, website?}`, `LoginBody`, `ForgotBody`, `ResetBody`, `VerifyBody`, `ChangePasswordBody {current, next}`, `PatchMeBody {tz?, reminderEnabled?, reminderTime? /*HH:MM*/, email?}`, `UserDto {id, email, nick, emailVerified, isAdmin, tz, rank, totalXp, reminderEnabled, reminderTime}`, `MeDto {user, hearts:{count, msToNext: number|null}, streak:{current,best}, xpToday, dailyGoal: 30, rank, nextRank: {next, xpNeeded, tracksNeeded}}`.
 
-- [ ] **Step 1: Write the failing test**: `RegisterBody.safeParse({…password:'123456789'})` → ошибка (9 < 10); ник `'Ann'` → ошибка (заглавная); `PatchMeBody.parse({reminderTime:'20:00'})` ок, `'25:00'` → ошибка; `ErrorCode.options` содержит `content_changed` и `queue_full`.
+- [ ] **Step 1: Write the failing test**: `RegisterBody.safeParse({…password:'1234567'})` → ошибка (7 < 8); ник `'Ann'` → ошибка (заглавная); `PatchMeBody.parse({reminderTime:'20:00'})` ок, `'25:00'` → ошибка; `ErrorCode.options` содержит `content_changed` и `queue_full`.
 - [ ] **Step 2:** Run — FAIL. **Step 3:** Implement. **Step 4:** Run — PASS.
 - [ ] **Step 5: Commit** `feat(api-contract): error codes and auth schemas`.
 
@@ -180,7 +180,7 @@ infra/compose.e2e.yaml, e2e/{playwright.config.ts,helpers/mailpit.ts,specs/01-re
   - `ErrorBoundary` + `ErrorScreen` — на `500` и необработанных ошибках «Что-то сломалось (код <reqId>)» с маскотом `sad`.
   - Экран «Проверь почту»: адрес, «Отправить ещё раз» с таймером 60 с, подсказка про «Спам», форма «Сменить email», после 3 повторов — «Напиши администратору».
 
-- [ ] **Step 1: Write the failing test**: `apiFetch('/api/auth/login', {method:'POST'})` шлёт заголовок `X-RC: 1`; на 401 вызывает навигацию на `/login?next=…`; `Register` блокирует кнопку при пароле < 10 символов и отправляет `tz` из `Intl.DateTimeFormat().resolvedOptions().timeZone`; `CheckEmail` — кнопка неактивна 60 с (`vi.useFakeTimers`); `Shell` при `innerWidth=390` рендерит нижнюю панель, при 1440 — боковую.
+- [ ] **Step 1: Write the failing test**: `apiFetch('/api/auth/login', {method:'POST'})` шлёт заголовок `X-RC: 1`; на 401 вызывает навигацию на `/login?next=…`; `Register` блокирует кнопку при пароле < 8 символов и отправляет `tz` из `Intl.DateTimeFormat().resolvedOptions().timeZone`; `CheckEmail` — кнопка неактивна 60 с (`vi.useFakeTimers`); `Shell` при `innerWidth=390` рендерит нижнюю панель, при 1440 — боковую.
 - [ ] **Step 2:** Run `pnpm --filter @rootcamp/web test` — FAIL. **Step 3:** Implement. **Step 4:** Run — PASS.
 - [ ] **Step 5: Commit** `feat(web): shell, tokens, auth screens`.
 

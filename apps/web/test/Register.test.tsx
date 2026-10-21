@@ -13,13 +13,14 @@ async function fill(password: string) {
 }
 
 describe('Register', () => {
-  it('keeps the button disabled while the password is shorter than 10 characters', async () => {
+  it('keeps the button disabled while the password is shorter than 8 characters', async () => {
     mockFetch(() => jsonResponse(500));
     renderAt(<Register />, { path: '/register' });
-    const ev = await fill('123456789');
+    const ev = await fill('1234567');
     const button = screen.getByRole('button', { name: 'Создать аккаунт' });
     expect(button).toBeDisabled();
-    await ev.type(screen.getByLabelText('Пароль'), '0');
+    expect(screen.getByText('Не меньше 8 символов')).toBeInTheDocument();
+    await ev.type(screen.getByLabelText('Пароль'), '8');
     expect(button).toBeEnabled();
   });
 

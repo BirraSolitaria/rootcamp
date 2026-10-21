@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { expect, type Page } from '@playwright/test';
 import { latestMail } from './mailpit';
 
-/** A password that passes the 10–128 rule. */
+/** A password that passes the 8–128 rule. */
 export const E2E_PASSWORD = 'e2e-correct-horse-battery';
 
 /**

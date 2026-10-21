@@ -374,7 +374,7 @@ innerImages: []                       # образы для прогрева reg
 
 | Метод и путь | Тело → ответ | Примечания |
 |---|---|---|
-| `POST /api/auth/register` | `{email, nick, password, tz, website?}` → `201 {user}` | Пароль 10–128 символов. `website` — поле-ловушка: если оно не пустое, сервер отвечает 201 и ничего не создаёт. Ошибки: `registration_closed`, `user_limit`, `email_taken`, `nick_taken` |
+| `POST /api/auth/register` | `{email, nick, password, tz, website?}` → `201 {user}` | Пароль 8–128 символов. `website` — поле-ловушка: если оно не пустое, сервер отвечает 201 и ничего не создаёт. Ошибки: `registration_closed`, `user_limit`, `email_taken`, `nick_taken` |
 | `POST /api/auth/verify` | `{token}` → `{user}` | Ссылка из письма живёт 24 ч и одноразовая |
 | `POST /api/auth/resend-verification` | → `204` | Не чаще 1 раза в минуту и 5 раз в сутки |
 | `POST /api/auth/login` | `{email, password}` → `{user}` | Ошибка `invalid_credentials` (одинаковая для неверного email и пароля), `banned` |

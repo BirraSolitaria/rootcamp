@@ -177,15 +177,22 @@ describe('POST /api/auth/register', () => {
     }
   });
 
-  it('bad nick / short password → 400 validation', async () => {
+  it('bad nick / password of 7 or 129 characters → 400 validation', async () => {
     for (const body of [
       { ...ann, nick: 'Ann' },
-      { ...ann, password: 'short' },
+      { ...ann, password: '1234567' },
+      { ...ann, password: 'a'.repeat(129) },
     ]) {
       const res = await register(body);
       expect(res.statusCode).toBe(400);
       expect(errorOf(res).code).toBe('validation');
     }
+  });
+
+  it('passwords of 8 and 128 characters → 201', async () => {
+    expect((await register({ ...ann, password: '12345678' })).statusCode).toBe(201);
+    const bob = { ...ann, email: 'bob@mail.ru', nick: 'bob', password: 'a'.repeat(128) };
+    expect((await register(bob)).statusCode).toBe(201);
   });
 
   it('a failing mailer does not fail registration; email_log stays queued with the error', async () => {
@@ -526,8 +533,8 @@ describe('POST /api/auth/forgot + /api/auth/reset', () => {
     expect([a.statusCode, b.statusCode].sort()).toEqual([204, 409]);
   });
 
-  it('short new password → 400 validation', async () => {
-    const res = await post('/api/auth/reset', { token: 'x', password: 'short' });
+  it('7-character new password → 400 validation', async () => {
+    const res = await post('/api/auth/reset', { token: 'x', password: '1234567' });
     expect(res.statusCode).toBe(400);
     expect(errorOf(res).code).toBe('validation');
   });

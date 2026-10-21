@@ -69,9 +69,9 @@ export function Register() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={10}
+          minLength={8}
           maxLength={128}
-          hint="Не меньше 10 символов"
+          hint="Не меньше 8 символов"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
