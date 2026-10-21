@@ -1,0 +1,20 @@
+# VPS test stand with HTTPS (compose.vps-tls.yaml). Automatic TLS for {$DOMAIN}; plain http
+# on :80 redirects to https. The production Caddyfile (security headers, sandboxd, content)
+# arrives in M6.
+{
+	admin off
+}
+
+{$DOMAIN} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

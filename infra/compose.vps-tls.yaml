@@ -1,0 +1,18 @@
+# Optional HTTPS for the VPS test stand, on top of compose.vps-test.yaml, once a domain's
+# A record points at the VPS. Caddy obtains a Let's Encrypt certificate by itself (ports 80
+# and 443 must be reachable) and keeps it in the caddy-data volume. Guide: docs/deploy/vps.md.
+services:
+  api:
+    environment:
+      PUBLIC_ORIGIN: https://${DOMAIN:?set DOMAIN in infra/vps.env}
+      COOKIE_SECURE: 'true'
+
+  caddy:
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/vps.env}
+    volumes:
+      - ./Caddyfile.vps-tls:/etc/caddy/Caddyfile:ro
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'

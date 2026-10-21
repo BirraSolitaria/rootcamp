@@ -1,0 +1,70 @@
+# VPS test stand overlay (before M6): images built from sources on the server, Mailpit instead
+# of real SMTP until one is configured, Caddy with Caddyfile.dev (plain http on :8080).
+# Secrets and the public origin come from infra/vps.env (created on the server from
+# infra/vps.env.example, never committed). Guide: docs/deploy/vps.md. Run as
+#   docker compose -p rootcamp --env-file infra/versions.env --env-file infra/vps.env \
+#     -f infra/compose.yaml -f infra/compose.vps-test.yaml up -d --build
+# Unlike compose.dev.yaml nothing but the site port is published on public interfaces:
+# Docker-published ports bypass ufw, so Postgres stays unpublished and Mailpit is bound to
+# 127.0.0.1 (reach it through an SSH tunnel).
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/vps.env}
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    environment:
+      # POSTGRES_PASSWORD must be URL-safe (the guide generates hex).
+      DATABASE_URL: postgres://rootcamp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/vps.env}@postgres:5432/rootcamp
+      # CSRF compares the browser's Origin with this verbatim (scheme + host + port).
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in infra/vps.env}
+      # false only while the stand is plain http; compose.vps-tls.yaml forces true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      NODE_ENV: production
+      TRUST_PROXY_HOPS: '1'
+      # Empty SMTP_HOST means Mailpit (letters are caught, nothing leaves the server).
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-rootcamp <noreply@rootcamp.test>}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN (>=16 chars) in infra/vps.env}
+      TICKET_SECRET: ${TICKET_SECRET:?set TICKET_SECRET (>=16 chars) in infra/vps.env}
+      # Empty = production default from apps/api/src/services/limiter.ts.
+      RATE_LIMIT_LOGIN_IP_PER_MIN: ${RATE_LIMIT_LOGIN_IP_PER_MIN:-}
+      RATE_LIMIT_LOGIN_EMAIL_PER_HOUR: ${RATE_LIMIT_LOGIN_EMAIL_PER_HOUR:-}
+      RATE_LIMIT_REGISTER_IP_PER_HOUR: ${RATE_LIMIT_REGISTER_IP_PER_HOUR:-}
+      RATE_LIMIT_FORGOT_IP_PER_HOUR: ${RATE_LIMIT_FORGOT_IP_PER_HOUR:-}
+      RATE_LIMIT_RESET_IP_PER_HOUR: ${RATE_LIMIT_RESET_IP_PER_HOUR:-}
+      RATE_LIMIT_VERIFY_LETTER_PER_MIN: ${RATE_LIMIT_VERIFY_LETTER_PER_MIN:-}
+      RATE_LIMIT_VERIFY_LETTER_PER_DAY: ${RATE_LIMIT_VERIFY_LETTER_PER_DAY:-}
+      RATE_LIMIT_PASSWORD_CHANGE_PER_MIN: ${RATE_LIMIT_PASSWORD_CHANGE_PER_MIN:-}
+      RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR: ${RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR:-}
+      RATE_LIMIT_GLOBAL_PER_MIN: ${RATE_LIMIT_GLOBAL_PER_MIN:-}
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.10-alpine}
+    volumes:
+      # The web image has no site config of its own (stock Caddyfile serves a placeholder).
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    ports:
+      # 8080 = every interface; 127.0.0.1:8080 = only through an SSH tunnel.
+      - '${SITE_BIND:-8080}:8080'
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.27}
+    networks: [rc-internal]
+    environment:
+      MP_SMTP_DISABLE_RDNS: 'true'
+    ports:
+      - '127.0.0.1:8025:8025'
+    mem_limit: 128m
+    restart: unless-stopped
