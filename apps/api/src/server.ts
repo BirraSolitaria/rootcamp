@@ -8,6 +8,7 @@ import { buildApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { startBoss } from './jobs/boss.js';
 import { startEmailSweeper, startEmailWorker } from './jobs/email.js';
+import { limitsFromConfig } from './services/limiter.js';
 import { createSmtpMailer } from './services/mailer.js';
 
 /** Shipped next to dist/ (package.json `files`), so this resolves both from src/ and dist/. */
@@ -76,6 +77,7 @@ try {
     now: Date.now,
     mailer,
     boss,
+    limits: limitsFromConfig(config),
     loggerInstance: log,
   });
   const emailDeps = { db: handle.db, mailer, queue: boss, now: Date.now, log };

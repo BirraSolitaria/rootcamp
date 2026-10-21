@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LIMITS } from './services/limiter.js';
 
 const DEFAULT_PORT = 3000;
 
@@ -37,6 +38,17 @@ const bool = (fallback: boolean) =>
     z
       .enum(['true', 'false'], 'must be "true" or "false"')
       .transform((v) => v === 'true')
+      .default(fallback),
+  );
+
+/** Positive integer; unset or empty means `fallback`. */
+const positiveInt = (fallback: number) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' ? blankToUndefined(v.trim()) : v),
+    z
+      .string()
+      .regex(/^[1-9]\d*$/, 'must be a positive integer')
+      .transform(Number)
       .default(fallback),
   );
 
@@ -99,6 +111,23 @@ const ConfigSchema = z.object({
     z.string().regex(/^\d$/, 'must be an integer 0-9').transform(Number).default(1),
   ),
   HOST: z.preprocess(blankToUndefined, z.string().default('0.0.0.0')),
+  /*
+   * Rate limits: the `max` of each limit (windows are fixed). Unset or empty means the
+   * production value from `LIMITS`; the dev stand relaxes them in compose.dev.yaml.
+   */
+  RATE_LIMIT_LOGIN_IP_PER_MIN: positiveInt(LIMITS.loginIp.max),
+  RATE_LIMIT_LOGIN_EMAIL_PER_HOUR: positiveInt(LIMITS.loginEmail.max),
+  RATE_LIMIT_REGISTER_IP_PER_HOUR: positiveInt(LIMITS.registerIp.max),
+  RATE_LIMIT_FORGOT_IP_PER_HOUR: positiveInt(LIMITS.forgotIp.max),
+  RATE_LIMIT_RESET_IP_PER_HOUR: positiveInt(LIMITS.resetIp.max),
+  /** Verify letters (resend-verification and email change), per user. */
+  RATE_LIMIT_VERIFY_LETTER_PER_MIN: positiveInt(LIMITS.resendVerificationMinute.max),
+  RATE_LIMIT_VERIFY_LETTER_PER_DAY: positiveInt(LIMITS.resendVerificationDay.max),
+  /** `POST /api/me/password`, per user. */
+  RATE_LIMIT_PASSWORD_CHANGE_PER_MIN: positiveInt(LIMITS.changePasswordMinute.max),
+  RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR: positiveInt(LIMITS.changePasswordHour.max),
+  /** Every API request, per user (else per IP). */
+  RATE_LIMIT_GLOBAL_PER_MIN: positiveInt(LIMITS.api.max),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

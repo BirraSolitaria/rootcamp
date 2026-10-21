@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { loadConfig, parsePort } from '../src/config.js';
+import { limitsFromConfig } from '../src/services/limiter.js';
 
 test('parsePort defaults to 3000 when PORT is unset or empty', () => {
   expect(parsePort(undefined)).toBe(3000);
@@ -103,5 +104,64 @@ describe('TRUST_PROXY_HOPS', () => {
 
   test.each(['-1', 'true', '1.5', '10'])('rejects %j', (value) => {
     expect(() => loadConfig({ ...env, TRUST_PROXY_HOPS: value })).toThrow(/TRUST_PROXY_HOPS/);
+  });
+});
+
+describe('RATE_LIMIT_* (max of each rate limit; windows are fixed)', () => {
+  const vars = {
+    RATE_LIMIT_LOGIN_IP_PER_MIN: 5,
+    RATE_LIMIT_LOGIN_EMAIL_PER_HOUR: 20,
+    RATE_LIMIT_REGISTER_IP_PER_HOUR: 3,
+    RATE_LIMIT_FORGOT_IP_PER_HOUR: 3,
+    RATE_LIMIT_RESET_IP_PER_HOUR: 10,
+    RATE_LIMIT_VERIFY_LETTER_PER_MIN: 1,
+    RATE_LIMIT_VERIFY_LETTER_PER_DAY: 5,
+    RATE_LIMIT_PASSWORD_CHANGE_PER_MIN: 5,
+    RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR: 20,
+    RATE_LIMIT_GLOBAL_PER_MIN: 300,
+  } as const;
+
+  test('unset or empty → the production values', () => {
+    expect(loadConfig(env)).toMatchObject(vars);
+    const blank = Object.fromEntries(Object.keys(vars).map((k) => [k, '']));
+    expect(loadConfig({ ...env, ...blank })).toMatchObject(vars);
+  });
+
+  test('each variable overrides its limit', () => {
+    const custom = Object.fromEntries(Object.keys(vars).map((k, i) => [k, String(100 + i)]));
+    const c = loadConfig({ ...env, ...custom, RATE_LIMIT_GLOBAL_PER_MIN: ' 1000 ' });
+    Object.keys(vars).forEach((k, i) => {
+      const expected = k === 'RATE_LIMIT_GLOBAL_PER_MIN' ? 1000 : 100 + i;
+      expect(c[k as keyof typeof vars]).toBe(expected);
+    });
+  });
+
+  test.each(['0', '-1', '1.5', 'abc', '1e3', '0x10'])(
+    'rejects %j (positive integers only)',
+    (v) => {
+      expect(() => loadConfig({ ...env, RATE_LIMIT_REGISTER_IP_PER_HOUR: v })).toThrow(
+        /RATE_LIMIT_REGISTER_IP_PER_HOUR: must be a positive integer/,
+      );
+    },
+  );
+
+  test('limitsFromConfig maps the variables onto limiter overrides', () => {
+    const c = loadConfig({
+      ...env,
+      RATE_LIMIT_REGISTER_IP_PER_HOUR: '100',
+      RATE_LIMIT_VERIFY_LETTER_PER_DAY: '42',
+    });
+    expect(limitsFromConfig(c)).toEqual({
+      api: { max: 300 },
+      loginIp: { max: 5 },
+      loginEmail: { max: 20 },
+      registerIp: { max: 100 },
+      forgotIp: { max: 3 },
+      resetIp: { max: 10 },
+      changePasswordMinute: { max: 5 },
+      changePasswordHour: { max: 20 },
+      resendVerificationMinute: { max: 1 },
+      resendVerificationDay: { max: 42 },
+    });
   });
 });

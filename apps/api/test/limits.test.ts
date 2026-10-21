@@ -3,7 +3,8 @@
 import { hearts, streaks, users } from '@rootcamp/db';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
-import { allOf, createLimiter } from '../src/services/limiter.js';
+import { loadConfig } from '../src/config.js';
+import { allOf, createLimiter, limitsFromConfig } from '../src/services/limiter.js';
 import { createSession } from '../src/services/sessions.js';
 import { hashPassword } from '../src/services/users.js';
 import { harnessAppDeps, TEST_PUBLIC_ORIGIN, useHarness } from './harness.js';
@@ -266,5 +267,42 @@ describe('limiter primitives', () => {
     expect(both.hit('a', 1)).toBe(false); // refused by `hour`…
     for (let i = 0; i < 4; i++) expect(minute.hit('a', 2)).toBe(true); // …`minute` kept 4 slots
     expect(both.retryAfterMs('a', 2)).toBe(3600_000 - 2);
+  });
+});
+
+describe('RATE_LIMIT_* env (as server.ts wires it)', () => {
+  it('RATE_LIMIT_REGISTER_IP_PER_HOUR=5 → the 6th registration from one IP is 429', async () => {
+    const { deps } = h();
+    const base = harnessAppDeps(deps);
+    const config = loadConfig({
+      DATABASE_URL: deps.databaseUrl,
+      PUBLIC_ORIGIN: TEST_PUBLIC_ORIGIN,
+      SMTP_HOST: deps.smtp.host,
+      SMTP_PORT: String(deps.smtp.port),
+      SMTP_FROM: 'rootcamp <noreply@rootcamp.test>',
+      INTERNAL_TOKEN: 'test-internal-token-0123456789',
+      TICKET_SECRET: 'test-ticket-secret-0123456789abcdef',
+      NODE_ENV: 'test',
+      RATE_LIMIT_REGISTER_IP_PER_HOUR: '5',
+    });
+    const app = await buildApp({ ...base, config, limits: limitsFromConfig(config) });
+    try {
+      const reg = (i: number) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/auth/register',
+          headers: { ...csrf, 'x-forwarded-for': '203.0.113.50' },
+          payload: {
+            email: `e${i}@mail.ru`,
+            nick: `env${i}`,
+            password: PASSWORD,
+            tz: 'Europe/Moscow',
+          },
+        });
+      for (let i = 0; i < 5; i++) expect((await reg(i)).statusCode).toBe(201);
+      expectRateLimited(await reg(5));
+    } finally {
+      await app.close();
+    }
   });
 });

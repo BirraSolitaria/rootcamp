@@ -1,3 +1,4 @@
+import type { Config } from '../config.js';
 import type { LimitOverride, Limits } from '../types.js';
 
 export interface LimitSpec {
@@ -51,6 +52,22 @@ export type LimitName = keyof typeof LIMITS;
 export function limitSpec(name: LimitName, overrides?: Limits): LimitSpec {
   const o: LimitOverride = overrides?.[name] ?? {};
   return { max: o.max ?? LIMITS[name].max, windowMs: o.windowMs ?? LIMITS[name].windowMs };
+}
+
+/** `deps.limits` from the `RATE_LIMIT_*` env variables (each sets one limit's `max`). */
+export function limitsFromConfig(c: Config): Limits {
+  return {
+    api: { max: c.RATE_LIMIT_GLOBAL_PER_MIN },
+    loginIp: { max: c.RATE_LIMIT_LOGIN_IP_PER_MIN },
+    loginEmail: { max: c.RATE_LIMIT_LOGIN_EMAIL_PER_HOUR },
+    registerIp: { max: c.RATE_LIMIT_REGISTER_IP_PER_HOUR },
+    forgotIp: { max: c.RATE_LIMIT_FORGOT_IP_PER_HOUR },
+    resetIp: { max: c.RATE_LIMIT_RESET_IP_PER_HOUR },
+    changePasswordMinute: { max: c.RATE_LIMIT_PASSWORD_CHANGE_PER_MIN },
+    changePasswordHour: { max: c.RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR },
+    resendVerificationMinute: { max: c.RATE_LIMIT_VERIFY_LETTER_PER_MIN },
+    resendVerificationDay: { max: c.RATE_LIMIT_VERIFY_LETTER_PER_DAY },
+  };
 }
 
 /** Sweep idle keys after this many hits so the map does not grow without bound. */

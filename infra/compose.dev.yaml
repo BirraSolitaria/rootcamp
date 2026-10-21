@@ -26,6 +26,16 @@ services:
       # Dev-only placeholders; production values come from the server's env file.
       INTERNAL_TOKEN: dev-internal-token-not-secret
       TICKET_SECRET: dev-ticket-secret-not-secret-0123456789
+      # Relaxed rate limits for manual testing (e2e and production keep the defaults).
+      RATE_LIMIT_REGISTER_IP_PER_HOUR: '100'
+      RATE_LIMIT_LOGIN_IP_PER_MIN: '30'
+      RATE_LIMIT_LOGIN_EMAIL_PER_HOUR: '100'
+      RATE_LIMIT_FORGOT_IP_PER_HOUR: '30'
+      RATE_LIMIT_RESET_IP_PER_HOUR: '100'
+      RATE_LIMIT_VERIFY_LETTER_PER_MIN: '10'
+      RATE_LIMIT_VERIFY_LETTER_PER_DAY: '100'
+      RATE_LIMIT_PASSWORD_CHANGE_PER_MIN: '30'
+      RATE_LIMIT_PASSWORD_CHANGE_PER_HOUR: '200'
 
   caddy:
     build:
