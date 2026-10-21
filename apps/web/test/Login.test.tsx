@@ -18,7 +18,20 @@ describe('Login', () => {
     );
     renderAt(<Login />, { path: '/login' });
     await submit();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Слишком много попыток');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Слишком много попыток. Попробуй через 60 с',
+    );
+  });
+
+  it('names a 429 wait over a minute in minutes', async () => {
+    mockFetch(() =>
+      jsonResponse(429, { error: { code: 'rate_limited', message: 'x' } }, { 'retry-after': '61' }),
+    );
+    renderAt(<Login />, { path: '/login' });
+    await submit();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Слишком много попыток. Попробуй через 2 минуты',
+    );
   });
 
   it('shows a wrong-credentials error on 401', async () => {

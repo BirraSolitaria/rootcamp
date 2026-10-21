@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiClientError } from '../../api/client';
-import { errorText } from '../../api/messages';
+import { errorText, retryWait } from '../../api/messages';
 import { authApi, ME_KEY, useMe } from '../../api/queries';
 import { AuthCard, Field, FormError } from './AuthCard';
 import styles from './AuthCard.module.css';
@@ -100,7 +100,7 @@ export function CheckEmail() {
         disabled={left > 0 || resend.isPending}
         onClick={() => resend.mutate()}
       >
-        {left > 0 ? `Отправить ещё раз (${left} с)` : 'Отправить ещё раз'}
+        {left > 0 ? `Отправить ещё раз (${retryWait(left)})` : 'Отправить ещё раз'}
       </button>
       {resends >= RESENDS_BEFORE_ADMIN && (
         <p className="t-body">

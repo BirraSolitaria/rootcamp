@@ -54,8 +54,15 @@ describe('CheckEmail', () => {
     await tick(60_000);
     fireEvent.click(screen.getByRole('button', { name: RESEND }));
     await tick(0);
-    expect(screen.getByRole('alert')).toHaveTextContent('Слишком много попыток');
-    await tick(89_000);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Слишком много попыток. Попробуй через 2 минуты',
+    );
+    // The live countdown on the button uses the same wording: minutes above 60 s, then seconds.
+    expect(screen.getByRole('button', { name: RESEND })).toHaveTextContent('(2 минуты)');
+    await tick(30_000);
+    expect(screen.getByRole('button', { name: RESEND })).toHaveTextContent('(60 с)');
+    await tick(59_000);
+    expect(screen.getByRole('button', { name: RESEND })).toHaveTextContent('(1 с)');
     expect(screen.getByRole('button', { name: RESEND })).toBeDisabled();
     await tick(1_000);
     expect(screen.getByRole('button', { name: RESEND })).toBeEnabled();

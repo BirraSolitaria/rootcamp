@@ -55,4 +55,20 @@ describe('Register', () => {
     await ev.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Этот ник уже занят');
   });
+
+  it('names a long 429 wait in minutes', async () => {
+    mockFetch(() =>
+      jsonResponse(
+        429,
+        { error: { code: 'rate_limited', message: 'x' } },
+        { 'retry-after': '3531' },
+      ),
+    );
+    renderAt(<Register />, { path: '/register' });
+    const ev = await fill('correct-horse');
+    await ev.click(screen.getByRole('button', { name: 'Создать аккаунт' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Слишком много попыток. Попробуй через 59 минут',
+    );
+  });
 });

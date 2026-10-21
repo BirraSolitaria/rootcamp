@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { formatMmSs, lastNDays, layerHash, weekdayLabel } from '../src/format.js';
 import { normalize, normalizeKey } from '../src/index.js';
-import { pluralDays } from '../src/plural.js';
+import { pluralDays, pluralRu } from '../src/plural.js';
 import { shuffle } from '../src/shuffle.js';
 
 test.each([
@@ -54,3 +54,17 @@ test('shuffle is deterministic with injected rng and does not mutate', () => {
   expect(shuffle(src, () => 0.999)).toEqual([1, 2, 3, 4]);
   expect(shuffle(src, () => 0)).toEqual([2, 3, 4, 1]);
 });
+test.each([
+  [1, 'минуту'],
+  [2, 'минуты'],
+  [4, 'минуты'],
+  [5, 'минут'],
+  [11, 'минут'],
+  [14, 'минут'],
+  [21, 'минуту'],
+  [22, 'минуты'],
+  [59, 'минут'],
+  [0, 'минут'],
+])('pluralRu(%i, минуту/минуты/минут)', (n, w) =>
+  expect(pluralRu(n as number, 'минуту', 'минуты', 'минут')).toBe(w),
+);

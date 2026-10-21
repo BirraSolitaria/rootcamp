@@ -16,6 +16,7 @@
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/unbounded": "5.3.0",
     "@rootcamp/api-contract": "workspace:*",
+    "@rootcamp/logic": "workspace:*",
     "@tanstack/react-query": "5.104.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",

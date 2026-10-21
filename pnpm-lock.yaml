@@ -117,6 +117,9 @@ importers:
       '@rootcamp/api-contract':
         specifier: workspace:*
         version: link:../../packages/api-contract
+      '@rootcamp/logic':
+        specifier: workspace:*
+        version: link:../../packages/logic
       '@tanstack/react-query':
         specifier: 5.104.5
         version: 5.104.5(@types/react@19.3.0)(react@19.3.1)
