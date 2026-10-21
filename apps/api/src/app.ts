@@ -12,10 +12,13 @@ import rateLimit from './plugins/rateLimit.js';
 import session from './plugins/session.js';
 import verifiedGuard from './plugins/verifiedGuard.js';
 import { authRoutes } from './routes/auth.js';
+import { contentRoutes } from './routes/content.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
+import { progressRoutes } from './routes/progress.js';
+import { NO_CONTENT, type ContentHolder } from './services/contentStore.js';
 import { createLimiters } from './services/limiter.js';
-import type { ContentStore, Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
+import type { Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
 
 export interface AppDeps {
   config: Config;
@@ -32,7 +35,11 @@ export interface AppDeps {
   /** A ready logger instance (server.ts shares its pino logger with pg-boss); wins over `logger`. */
   loggerInstance?: FastifyBaseLogger;
   sandboxd?: SandboxdClient /* M4a */;
-  content?: ContentStore /* M3 */;
+  /**
+   * Active course content (`services/contentStore.ts`); the caller owns its lifecycle
+   * (`close()`). Omitted: content routes answer 503 and `GET /api/me` counts no tracks.
+   */
+  content?: ContentHolder;
 }
 
 /** Short random request id: shown to users in 500 messages and logged by pino. */
@@ -65,7 +72,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(healthRoutes, { db: deps.db });
   await app.register(authRoutes, { ...deps, limiters });
-  await app.register(meRoutes, { ...deps, limiters });
+  const content = deps.content ?? NO_CONTENT;
+  await app.register(meRoutes, { ...deps, content, limiters });
+  await app.register(contentRoutes, { content });
+  await app.register(progressRoutes, { db: deps.db, now: deps.now, content });
 
   return app;
 }

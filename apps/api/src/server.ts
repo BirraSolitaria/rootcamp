@@ -8,6 +8,7 @@ import { buildApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { startBoss } from './jobs/boss.js';
 import { startEmailSweeper, startEmailWorker } from './jobs/email.js';
+import { NO_CONTENT, startContentHolder, type ContentHolder } from './services/contentStore.js';
 import { limitsFromConfig } from './services/limiter.js';
 import { createSmtpMailer } from './services/mailer.js';
 
@@ -35,6 +36,7 @@ const log = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug' })
 
 let app: FastifyInstance | undefined;
 let boss: PgBoss | undefined;
+let content: ContentHolder | undefined;
 let stopSweeper: (() => void) | undefined;
 let shuttingDown = false;
 
@@ -49,6 +51,7 @@ async function shutdown(reason: string, exitCode = 0): Promise<void> {
     exitCode = 1;
   }
   stopSweeper?.();
+  await content?.close().catch(() => {});
   try {
     // Lets the running email job finish; queued jobs stay in `pgboss` for the next start.
     await boss?.stop({ graceful: true, wait: true, timeout: BOSS_STOP_TIMEOUT_MS });
@@ -71,6 +74,12 @@ try {
   // Serialised across replicas by an advisory lock inside runMigrations.
   await runMigrations(handle.db, MIGRATIONS_DIR);
   boss = await startBoss(config, log);
+  if (config.CONTENT_DIR) {
+    content = await startContentHolder({ db: handle.db, dir: config.CONTENT_DIR, log });
+    if (!content.peek()) log.warn('no content version active: run content:activate <hash>');
+  } else {
+    log.warn('CONTENT_DIR is not set: content routes answer 503');
+  }
   app = await buildApp({
     config,
     db: handle.db,
@@ -79,6 +88,7 @@ try {
     boss,
     limits: limitsFromConfig(config),
     loggerInstance: log,
+    content: content ?? NO_CONTENT,
   });
   const emailDeps = { db: handle.db, mailer, queue: boss, now: Date.now, log };
   await startEmailWorker(boss, emailDeps);

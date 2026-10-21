@@ -12,21 +12,25 @@ import {
 } from '@rootcamp/logic';
 import { and, eq, sum } from 'drizzle-orm';
 import { HttpError } from '../plugins/errors.js';
+import type { ContentStore } from './contentStore.js';
 import { issueEmailToken } from './emailTokens.js';
+import { completedLessonIds } from './progress.js';
 import { takenCode, toUserDto, type User } from './users.js';
 
 /** Daily XP goal shown on the home screen (spec §5.1: `dailyGoal: 30`). */
 export const DAILY_GOAL = 30;
 
-/** Tracks the user has completed. M2 has no content yet; M3 computes it via `ContentStore`. */
-const COMPLETED_TRACKS_M2 = 0;
-
 /**
  * State for `GET /api/me`. In one transaction locks the user's `hearts` and `streaks` rows,
  * applies `regen` and `checkStreakBroken` (today in the user's zone) and stores the result, then
- * sums today's `xp_events`.
+ * sums today's `xp_events`. Completed tracks for the rank come from `content` (0 without it).
  */
-export async function getMe(db: Db, userId: string, now: number): Promise<MeDto> {
+export async function getMe(
+  db: Db,
+  userId: string,
+  now: number,
+  content: ContentStore | null = null,
+): Promise<MeDto> {
   return db.transaction(async (tx) => {
     const [user] = await tx.select().from(users).where(eq(users.id, userId));
     if (!user) throw new HttpError(401, 'unauthorized', 'sign in required');
@@ -58,7 +62,9 @@ export async function getMe(db: Db, userId: string, now: number): Promise<MeDto>
       .from(xpEvents)
       .where(and(eq(xpEvents.userId, userId), eq(xpEvents.day, today)));
 
-    const completedTracks = COMPLETED_TRACKS_M2;
+    const completedTracks = content
+      ? content.completedTrackCount(new Set(await completedLessonIds(tx, content, userId)))
+      : 0;
     return {
       user: toUserDto(user),
       hearts: { count: heartsNow.count, msToNext: msToNextHeart(heartsNow, now) },

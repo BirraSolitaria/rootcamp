@@ -1,4 +1,4 @@
-import { hearts, settings, users } from '@rootcamp/db/schema';
+import { hearts, learningSessions, reviewItems, settings, users } from '@rootcamp/db/schema';
 import { eq } from 'drizzle-orm';
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
@@ -77,6 +77,32 @@ describe('accounts schema constraints', () => {
     await db.insert(hearts).values({ userId: u!.id, count: 5 });
   });
 
+  it('learning_sessions: at most one in_progress session per user', async () => {
+    const { db } = h();
+    const [u] = await db.insert(users).values(baseUser).returning();
+    const row = {
+      userId: u!.id,
+      kind: 'lesson' as const,
+      contentVersion: 'abcdef012345',
+      state: {},
+    };
+    await db.insert(learningSessions).values(row);
+    expect(await pgCode(db.insert(learningSessions).values(row))).toBe('23505');
+    await db.insert(learningSessions).values({ ...row, status: 'completed' });
+    await db.insert(learningSessions).values({ ...row, status: 'abandoned' });
+  });
+
+  it('review_items: box 1..3 and the (user_id, due_date) index', async () => {
+    const { db, sql } = h();
+    const [u] = await db.insert(users).values(baseUser).returning();
+    const item = { userId: u!.id, taskId: 't7.s01.l01.t01', dueDate: '2026-10-20' };
+    expect(await pgCode(db.insert(reviewItems).values({ ...item, box: 4 }))).toBe('23514');
+    await db.insert(reviewItems).values({ ...item, box: 3 });
+    const rows = await sql<{ indexdef: string }[]>`
+      select indexdef from pg_indexes where tablename = 'review_items'`;
+    expect(rows.map((r) => r.indexdef).join('\n')).toMatch(/\(user_id, due_date\)/);
+  });
+
   it('creates the xp_events indexes', async () => {
     const rows = await h().sql<{ indexdef: string }[]>`
       select indexdef from pg_indexes where tablename = 'xp_events'`;
@@ -92,9 +118,10 @@ describe('harness', () => {
     await db.insert(users).values(baseUser);
     await db.update(settings).set({ value: 1 }).where(eq(settings.key, 'max_users'));
     await db.delete(settings).where(eq(settings.key, 'registration_mode'));
+    await db.insert(settings).values({ key: 'content_version', value: 'abcdef012345' });
   });
 
-  it('truncates between tests (2/2): tables are empty and default settings re-seeded', async () => {
+  it('truncates between tests (2/2): tables are empty and migration-seeded settings restored', async () => {
     const { db } = h();
     expect(await db.select().from(users)).toEqual([]);
     const rows = await db.select().from(settings).orderBy(settings.key);

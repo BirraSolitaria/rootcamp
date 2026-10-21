@@ -1,25 +1,20 @@
 // Integration test harness (spec §10.2): real PostgreSQL 16 with migrations and Mailpit as SMTP,
 // both via Testcontainers, one set per test file. Between tests every public table is TRUNCATEd
-// (CASCADE), default settings are re-seeded, the mailbox is emptied, the clock is reset and the
-// app is rebuilt from its factory (no in-memory state survives a test).
+// (CASCADE), the `settings` rows the migrations seeded are restored (R-M3-4), the mailbox is
+// emptied, the clock is reset and the app is rebuilt from its factory (no in-memory state
+// survives a test).
 //
 //   const h = useHarness();            // registers beforeAll / beforeEach / afterAll
 //   it('...', async () => { const { app, db, mail, clock } = h(); ... });
 import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import {
-  createDb,
-  DEFAULT_SETTINGS,
-  runMigrations,
-  settings,
-  type Db,
-  type DbHandle,
-} from '@rootcamp/db';
+import { createDb, runMigrations, settings, type Db, type DbHandle } from '@rootcamp/db';
 import type { FastifyInstance } from 'fastify';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp, type AppDeps } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
+import { startContentHolder } from '../src/services/contentStore.js';
 import { createSmtpMailer } from '../src/services/mailer.js';
 import type { Limits } from '../src/types.js';
 
@@ -67,6 +62,8 @@ export interface HarnessDeps {
   mailpitUrl: string;
   /** Rate-limit overrides (R-M2-3), forwarded verbatim from `HarnessOpts.limits`. */
   limits?: Limits;
+  /** content-dist root from `HarnessOpts.contentDir`. */
+  contentDir?: string;
 }
 
 export type AppFactory = (deps: HarnessDeps) => FastifyInstance | Promise<FastifyInstance>;
@@ -81,6 +78,11 @@ export interface HarnessOpts {
   limits?: Limits;
   /** Clock value at the start of every test. Default: `DEFAULT_START`. */
   startTime?: number;
+  /**
+   * content-dist root (`server/<hash>/`). When set, the default factory gives the app a
+   * `ContentHolder` over it (LISTEN rc_content); without it content routes answer 503.
+   */
+  contentDir?: string;
 }
 
 export interface Harness {
@@ -102,8 +104,8 @@ export interface Harness {
   };
   clock: Clock;
   /**
-   * Rebuild the app from the factory, TRUNCATE all public tables, re-seed default settings,
-   * empty the mailbox, reset the clock.
+   * TRUNCATE all public tables, restore the migration-seeded settings, empty the mailbox,
+   * reset the clock, then rebuild the app from the factory (so it starts on a clean database).
    */
   reset(): Promise<void>;
   close(): Promise<void>;
@@ -154,7 +156,13 @@ export function harnessAppDeps(d: HarnessDeps): AppDeps {
   };
 }
 
-const defaultAppFactory: AppFactory = (d) => buildApp(harnessAppDeps(d));
+const defaultAppFactory: AppFactory = async (d) => {
+  if (!d.contentDir) return buildApp(harnessAppDeps(d));
+  const content = await startContentHolder({ db: d.db, dir: d.contentDir });
+  const app = await buildApp({ ...harnessAppDeps(d), content });
+  app.addHook('onClose', () => content.close());
+  return app;
+};
 
 function createClock(start: number): Clock {
   let current = start;
@@ -264,16 +272,20 @@ function createMail(baseUrl: string): Harness['mail'] {
   };
 }
 
-async function truncateAll(db: Db): Promise<void> {
+type SettingRow = typeof settings.$inferSelect;
+
+/**
+ * Empties every public table, then puts back `seed`: the `settings` rows as the migrations
+ * left them (R-M3-4), so any key a migration seeds survives a reset without being listed here.
+ */
+async function truncateAll(db: Db, seed: SettingRow[]): Promise<void> {
   const rows = await db.$client<{ tablename: string }[]>`
     select tablename from pg_tables where schemaname = 'public'`;
   if (rows.length > 0) {
     const list = rows.map((r) => `"public"."${r.tablename}"`).join(', ');
     await db.$client.unsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
   }
-  await db
-    .insert(settings)
-    .values(Object.entries(DEFAULT_SETTINGS).map(([key, value]) => ({ key, value })));
+  if (seed.length > 0) await db.insert(settings).values(seed);
 }
 
 export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
@@ -296,6 +308,7 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
     const databaseUrl = postgresUrl(pg);
     handle = createDb(databaseUrl);
     await runMigrations(handle.db, MIGRATIONS_DIR);
+    const seededSettings = await handle.db.select().from(settings);
 
     const mailpitUrl = `http://${hostOf(mailpit)}:${mailpit.getMappedPort(8025)}`;
     const mail = createMail(mailpitUrl);
@@ -310,6 +323,7 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
       smtp: { host: hostOf(mailpit), port: mailpit.getMappedPort(1025) },
       mailpitUrl,
       limits: opts.limits,
+      contentDir: opts.contentDir,
     };
     const build = async () => {
       const built = await factory(deps);
@@ -333,10 +347,10 @@ export async function startHarness(opts: HarnessOpts = {}): Promise<Harness> {
       clock,
       async reset() {
         await app.close();
-        app = await build();
-        await truncateAll(db);
+        await truncateAll(db, seededSettings);
         await mail.clear();
         clock.set(startTime);
+        app = await build();
       },
       async close() {
         await app.close();

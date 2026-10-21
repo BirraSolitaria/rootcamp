@@ -5,16 +5,20 @@ import type { FastifyInstance } from 'fastify';
 import { HttpError } from '../plugins/errors.js';
 import { enforce } from '../plugins/rateLimit.js';
 import { SESSION_COOKIE } from '../plugins/session.js';
+import type { ContentHolder } from '../services/contentStore.js';
 import { getMe, updateMe } from '../services/me.js';
 import { revokeAllSessions } from '../services/sessions.js';
 import { findUserById, hashPassword, toUserDto, verifyPassword } from '../services/users.js';
 import { sendTokenEmail, type AuthRouteDeps } from './auth.js';
 
 /** `GET|PATCH /api/me`, `POST /api/me/password`. All require a session. */
-export async function meRoutes(app: FastifyInstance, deps: AuthRouteDeps) {
-  const { db, now, limiters } = deps;
+export async function meRoutes(
+  app: FastifyInstance,
+  deps: AuthRouteDeps & { content: ContentHolder },
+) {
+  const { db, now, limiters, content } = deps;
 
-  app.get('/api/me', async (req) => getMe(db, req.user!.id, now()));
+  app.get('/api/me', async (req) => getMe(db, req.user!.id, now(), content.peek()));
 
   app.patch('/api/me', async (req) => {
     const sessionUser = req.user!;

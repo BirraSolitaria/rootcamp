@@ -29,6 +29,12 @@ describe('@rootcamp/db schema', () => {
     ]);
   });
 
+  it('exports the M3 learning tables under their SQL names', () => {
+    expect(
+      [schema.lessonCompletions, schema.reviewItems, schema.learningSessions].map(getTableName),
+    ).toEqual(['lesson_completions', 'review_items', 'learning_sessions']);
+  });
+
   it('default settings are registration open and 50 users', () => {
     expect(DEFAULT_SETTINGS).toEqual({ registration_mode: 'open', max_users: 50 });
   });

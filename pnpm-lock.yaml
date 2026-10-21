@@ -47,6 +47,9 @@ importers:
       '@rootcamp/api-contract':
         specifier: workspace:*
         version: link:../../packages/api-contract
+      '@rootcamp/content-schema':
+        specifier: workspace:*
+        version: link:../../packages/content-schema
       '@rootcamp/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -87,6 +90,9 @@ importers:
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      content-build:
+        specifier: workspace:*
+        version: link:../../tools/content-build
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
