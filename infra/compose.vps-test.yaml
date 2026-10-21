@@ -4,9 +4,10 @@
 # infra/vps.env.example, never committed). Guide: docs/deploy/vps.md. Run as
 #   docker compose -p rootcamp --env-file infra/versions.env --env-file infra/vps.env \
 #     -f infra/compose.yaml -f infra/compose.vps-test.yaml up -d --build
-# Unlike compose.dev.yaml nothing but the site port is published on public interfaces:
-# Docker-published ports bypass ufw, so Postgres stays unpublished and Mailpit is bound to
-# 127.0.0.1 (reach it through an SSH tunnel).
+# Unlike compose.dev.yaml nothing but the site port is published on public interfaces by default:
+# Docker-published ports bypass ufw/firewalld, so Postgres stays unpublished and Mailpit is bound
+# to 127.0.0.1 (reach it through an SSH tunnel). MAILPIT_BIND may open the Mailpit UI publicly,
+# but only together with MAILPIT_UI_AUTH_FILE (basic auth): letters hold verify/reset links.
 services:
   postgres:
     environment:
@@ -64,7 +65,16 @@ services:
     networks: [rc-internal]
     environment:
       MP_SMTP_DISABLE_RDNS: 'true'
+      # Basic auth for the UI and API, read from a mounted "user:password" file so the
+      # password does not show up in `docker inspect`. Unset = no auth (private bind only).
+      MP_UI_AUTH_FILE: ${MAILPIT_UI_AUTH_FILE:+/run/mailpit/ui-auth}
+    volumes:
+      - ${MAILPIT_UI_AUTH_FILE:-/dev/null}:/run/mailpit/ui-auth:ro
+    labels:
+      # Guard: setting MAILPIT_BIND (any non-default bind) without the auth file stops compose.
+      rootcamp.mailpit-auth: ${MAILPIT_BIND:+${MAILPIT_UI_AUTH_FILE:?MAILPIT_BIND is set, so set MAILPIT_UI_AUTH_FILE in infra/vps.env (open Mailpit = account takeover)}}
     ports:
-      - '127.0.0.1:8025:8025'
+      # Default 127.0.0.1:8025 = SSH tunnel only; 8025 = every interface (needs the auth file).
+      - '${MAILPIT_BIND:-127.0.0.1:8025}:8025'
     mem_limit: 128m
     restart: unless-stopped

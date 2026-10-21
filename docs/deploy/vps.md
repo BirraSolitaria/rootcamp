@@ -11,7 +11,7 @@ VPS: 4 vCPU, 7,5 ГБ RAM, 119 ГБ диска, KVM, CentOS Stream 9 (ядро 5
 > - Адрес: **http://87.251.86.80:8080**.
 > - Вход: `ssh deploy@87.251.86.80` (только по ключу; у `deploy` sudo без пароля).
 > - Код: `~/rootcamp` пользователя `deploy`, секреты в `~/rootcamp/infra/vps.env` (права `600`).
-> - Mailpit (письма): на ПК `ssh -N -L 8025:127.0.0.1:8025 deploy@87.251.86.80`, окно не закрывать, затем открыть http://127.0.0.1:8025.
+> - Mailpit (письма): **http://87.251.86.80:8025**, вход по логину и паролю (basic auth). Посмотреть их с ПК: `ssh deploy@87.251.86.80 'cat ~/rootcamp/infra/mailpit-ui.auth'` (строка `логин:пароль`). Подробности и как закрыть обратно — §8, «Mailpit в браузере».
 > - Обновление до свежего `main` (на сервере):
 >
 >   ```bash
@@ -38,7 +38,7 @@ VPS: 4 vCPU, 7,5 ГБ RAM, 119 ГБ диска, KVM, CentOS Stream 9 (ядро 5
 
 Файлы стенда в репозитории:
 
-- `infra/compose.vps-test.yaml` — overlay поверх `infra/compose.yaml`. Включает сборку из исходников, Mailpit на `127.0.0.1:8025` и Caddy с `Caddyfile.dev` на порту 8080. Postgres наружу не публикуется.
+- `infra/compose.vps-test.yaml` — overlay поверх `infra/compose.yaml`. Включает сборку из исходников, Mailpit на `127.0.0.1:8025` (наружу — только с паролем, §8) и Caddy с `Caddyfile.dev` на порту 8080. Postgres наружу не публикуется.
 - `infra/vps.env.example` — шаблон. На сервере из него создаётся `infra/vps.env` с секретами. Этот файл есть в `.gitignore` и в git не попадает.
 - `infra/compose.vps-tls.yaml` и `infra/Caddyfile.vps-tls` — необязательный HTTPS-слой для домена (§12).
 
@@ -111,9 +111,9 @@ sudo firewall-cmd --reload
 
 В зоне `public` образа CentOS заранее разрешены `cockpit` (порт 9090, на сервере его никто не слушает) и `dhcpv6-client`. Их можно оставить; убрать cockpit: `sudo firewall-cmd --permanent --remove-service=cockpit && sudo firewall-cmd --reload`.
 
-firewalld **не защищает** порты, опубликованные Docker. Docker создаёт свою зону `docker` (target `ACCEPT`) для своих мостов и пропускает опубликованные порты собственными правилами nftables мимо зоны `public` — так же, как на Ubuntu мимо ufw. Поэтому в `compose.vps-test.yaml` Postgres не опубликован вовсе, а Mailpit привязан к `127.0.0.1`; это не перестраховка, а единственная защита. Не добавляйте `ports:` без `127.0.0.1:` в начале.
+firewalld **не защищает** порты, опубликованные Docker. Docker создаёт свою зону `docker` (target `ACCEPT`) для своих мостов и пропускает опубликованные порты собственными правилами nftables мимо зоны `public` — так же, как на Ubuntu мимо ufw. Поэтому в `compose.vps-test.yaml` Postgres не опубликован вовсе, а Mailpit по умолчанию привязан к `127.0.0.1`; это не перестраховка, а единственная защита. Не добавляйте `ports:` без `127.0.0.1:` в начале. Единственное исключение — Mailpit с паролем (§8, «Mailpit в браузере»); для наглядности его порт тоже добавляют в зону: `sudo firewall-cmd --permanent --add-port=8025/tcp && sudo firewall-cmd --reload`.
 
-**Проверка:** `sudo firewall-cmd --list-all` (зона `public`) показывает `services: … ssh` и `ports: 8080/tcp`. После запуска стенда (§8) с ПК `Test-NetConnection <IP> -Port 8025` и `-Port 5432` дают `TcpTestSucceeded : False`, а `-Port 8080` — `True`.
+**Проверка:** `sudo firewall-cmd --list-all` (зона `public`) показывает `services: … ssh` и `ports: 8080/tcp`. После запуска стенда (§8) с ПК `Test-NetConnection <IP> -Port 8025` и `-Port 5432` дают `TcpTestSucceeded : False` (8025 — пока Mailpit не открыт по §8), а `-Port 8080` — `True`.
 
 ## 4. Обновления системы и dnf-automatic
 
@@ -249,7 +249,7 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST -H "X-RC: 1" -H "Origin: http://<
    ssh -N -L 8025:127.0.0.1:8025 deploy@<IP>
    ```
 
-   Затем откройте `http://127.0.0.1:8025`. Это адрес на ПК, туннель ведёт на Mailpit сервера.
+   Затем откройте `http://127.0.0.1:8025`. Это адрес на ПК, туннель ведёт на Mailpit сервера. Если Mailpit открыт наружу (ниже), туннель не нужен: `http://<IP>:8025` с логином и паролем.
 
 3. Выдайте себе права админа:
 
@@ -258,6 +258,25 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST -H "X-RC: 1" -H "Origin: http://<
    ```
 
 **Проверка:** печатается `granted admin to you@example.com (<uuid>)`. Для несуществующего email печатается `no user with email …` с кодом выхода 1. Админка появится в M5, пока флаг только записывается в БД.
+
+### Mailpit в браузере (без туннеля, с паролем)
+
+Можно открыть Mailpit как `http://<IP>:8025`. **Внимание:** в письмах лежат ссылки подтверждения и сброса пароля; кто прочитал Mailpit, тот может войти в любой аккаунт стенда. Поэтому наружу Mailpit открывается только с basic auth: compose откажется стартовать, если задан `MAILPIT_BIND`, но не задан `MAILPIT_UI_AUTH_FILE`. Пароль лежит в отдельном файле и монтируется в контейнер, поэтому в `docker inspect` его не видно.
+
+```bash
+cd ~/rootcamp
+printf 'rootcamp:%s\n' "$(openssl rand -base64 18 | tr -d '/+=')" > infra/mailpit-ui.auth
+chmod 600 infra/mailpit-ui.auth            # файл git-ignored
+printf 'MAILPIT_BIND=8025\nMAILPIT_UI_AUTH_FILE=./mailpit-ui.auth\n' >> infra/vps.env
+sudo firewall-cmd --permanent --add-port=8025/tcp && sudo firewall-cmd --reload
+rc up -d mailpit
+```
+
+Логин и пароль (строка `логин:пароль`) посмотреть с ПК: `ssh deploy@<IP> 'cat ~/rootcamp/infra/mailpit-ui.auth'`. Сменить пароль: перезаписать файл той же командой `printf` и выполнить `rc up -d --force-recreate mailpit`.
+
+Вернуть «только через туннель»: удалить строки `MAILPIT_BIND` и `MAILPIT_UI_AUTH_FILE` из `infra/vps.env`, выполнить `rc up -d mailpit` и `sudo firewall-cmd --permanent --remove-port=8025/tcp && sudo firewall-cmd --reload`.
+
+**Проверка:** с ПК `curl.exe -s -o NUL -w "%{http_code}" http://<IP>:8025/` печатает `401`, а с `-u rootcamp:<пароль>` — `200`. На сервере `ss -tlnp | grep 8025` показывает `0.0.0.0:8025`.
 
 ## 9. Повседневные операции
 
