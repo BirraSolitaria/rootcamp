@@ -11,3 +11,4 @@ docs
 infra
 .env
 content-dist
+.pnpm-store

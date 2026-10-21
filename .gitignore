@@ -11,3 +11,4 @@ blob-report/
 infra/vps.env
 infra/mailpit-ui.auth
 content-dist/
+.pnpm-store/
