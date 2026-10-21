@@ -1,7 +1,9 @@
-// Lesson sessions (spec §5.1 «Сессии обучения», §9). The rules live in `@rootcamp/logic`; this
-// module loads and stores their state. Every mutation of a user's learning state locks that
-// user's `hearts` row first (`SELECT … FOR UPDATE`), then the session row, so starts, answers and
-// retries of one user run one at a time and never deadlock against each other.
+// Lesson sessions (spec §5.1 «Сессии обучения», §9); review/drill sessions start in review.ts and
+// share the answer path here. The rules live in `@rootcamp/logic`; this module loads and stores
+// their state. Starts and answers lock the user's `hearts` row first (`SELECT … FOR UPDATE`),
+// then the session row, then `streaks`, then `users`, so starts, answers and retries of one user
+// run one at a time and never deadlock against each other. `abandonSession` is the exception: a
+// single conditional UPDATE of one session row, it takes no other lock and cannot deadlock.
 import type { AnswerBody, AnswerResponse, StartLessonResponse } from '@rootcamp/api-contract';
 import type { UserAnswer as SchemaUserAnswer } from '@rootcamp/content-schema';
 import {
@@ -27,17 +29,19 @@ import {
   type Hearts,
   type LessonSession,
   type ReviewItems,
+  type ReviewSession,
 } from '@rootcamp/logic';
 import { and, eq, sql } from 'drizzle-orm';
 import { HttpError } from '../plugins/errors.js';
 import type { ContentStore } from './contentStore.js';
 import type { Executor } from './executor.js';
 import { completedLessonIds } from './progress.js';
+import { answerReview } from './review.js';
 import { applyXp, xpOnDay } from './rewards.js';
 
 /** `learning_sessions.state`: the logic session plus the last answer, for idempotent retries. */
-export interface StoredState {
-  session: LessonSession;
+export interface StoredState<S = LessonSession> {
+  session: S;
   lastAnswer?: { taskId: string; presentation: number; response: AnswerResponse };
 }
 
@@ -51,12 +55,12 @@ function sessionNotFound(): HttpError {
   return new HttpError(404, 'not_found', 'session not found');
 }
 
-function heartsDto(h: Hearts, now: number) {
+export function heartsDto(h: Hearts, now: number) {
   return { count: h.count, msToNext: msToNextHeart(h, now) };
 }
 
 /** Locks the user's `hearts` row; every learning mutation takes this lock first. */
-async function lockHearts(tx: Executor, userId: string): Promise<Hearts> {
+export async function lockHearts(tx: Executor, userId: string): Promise<Hearts> {
   const [row] = await tx
     .select()
     .from(heartsTable)
@@ -66,7 +70,7 @@ async function lockHearts(tx: Executor, userId: string): Promise<Hearts> {
   return { count: row.count, lastRegenAt: row.lastRegenAt.getTime() };
 }
 
-async function saveHearts(tx: Executor, userId: string, before: Hearts, after: Hearts) {
+export async function saveHearts(tx: Executor, userId: string, before: Hearts, after: Hearts) {
   if (after.count === before.count && after.lastRegenAt === before.lastRegenAt) return;
   await tx
     .update(heartsTable)
@@ -74,7 +78,7 @@ async function saveHearts(tx: Executor, userId: string, before: Hearts, after: H
     .where(eq(heartsTable.userId, userId));
 }
 
-async function loadUser(tx: Executor, userId: string) {
+export async function loadUser(tx: Executor, userId: string) {
   const [user] = await tx.select().from(users).where(eq(users.id, userId));
   if (!user) throw new HttpError(401, 'unauthorized', 'sign in required');
   return user;
@@ -139,7 +143,7 @@ export async function startLessonSession(
 type Outcome = { response: AnswerResponse } | { error: HttpError };
 
 /**
- * `POST /api/sessions/:id/answer` for lessons (review/drill join in Task 6), in one transaction:
+ * `POST /api/sessions/:id/answer` for lessons, reviews and drills, in one transaction:
  * - the same `taskId` + `presentation` as the last answer returns that answer's response and
  *   changes nothing (§9 retries; also after the session ended);
  * - a session that is no longer `in_progress` → `409 session_closed` (`content_changed` if that
@@ -147,9 +151,9 @@ type Outcome = { response: AnswerResponse } | { error: HttpError };
  * - a session of another content version is closed as `content_changed` (no reward, no
  *   penalty) → `409 content_changed`;
  * - another task or presentation than the one shown → `409 out_of_order`;
- * - otherwise `checkAnswer` → `answerLessonTask` → `continueLesson`; a wrong answer stores the
- *   Leitner item, `completed` runs `completeLesson` and credits XP, `out_of_hearts` closes the
- *   session.
+ * - otherwise, in a lesson, `checkAnswer` → `answerLessonTask` → `continueLesson`; a wrong answer
+ *   stores the Leitner item, `completed` runs `completeLesson` and credits XP, `out_of_hearts`
+ *   closes the session; review and drill answers go to `answerReview` (review.ts).
  */
 export async function answerInSession(
   db: Db,
@@ -190,9 +194,16 @@ export async function answerInSession(
         error: new HttpError(409, 'content_changed', 'the course was updated, restart the lesson'),
       };
     }
-    if (row.kind !== 'lesson') throw new Error(`answers in ${row.kind} sessions are not supported`);
-
-    const response = await answerLesson(tx, store, user, row.id, state, body, heartsBefore, now);
+    const response =
+      row.kind === 'lesson'
+        ? await answerLesson(tx, store, user, row.id, state, body, heartsBefore, now)
+        : await answerReview(tx, store, user, {
+            rowId: row.id,
+            state: state as unknown as StoredState<ReviewSession>,
+            body,
+            heartsBefore,
+            now,
+          });
     return { response };
   });
   if ('error' in outcome) throw outcome.error;

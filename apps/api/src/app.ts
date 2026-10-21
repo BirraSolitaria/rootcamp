@@ -15,6 +15,7 @@ import { authRoutes } from './routes/auth.js';
 import { contentRoutes } from './routes/content.js';
 import { healthRoutes } from './routes/health.js';
 import { lessonRoutes } from './routes/lessons.js';
+import { reviewRoutes } from './routes/review.js';
 import { meRoutes } from './routes/me.js';
 import { progressRoutes } from './routes/progress.js';
 import { NO_CONTENT, type ContentHolder } from './services/contentStore.js';
@@ -78,6 +79,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(contentRoutes, { content });
   await app.register(progressRoutes, { db: deps.db, now: deps.now, content });
   await app.register(lessonRoutes, { db: deps.db, now: deps.now, content });
+  await app.register(reviewRoutes, { db: deps.db, now: deps.now, content });
 
   return app;
 }

@@ -30,6 +30,26 @@ export const StartLessonResponse = z.object({
 });
 export type StartLessonResponse = z.infer<typeof StartLessonResponse>;
 
+export const ReviewMode = z.enum(['review', 'drill']);
+export type ReviewMode = z.infer<typeof ReviewMode>;
+
+/** `POST /api/review/start`: `review` — due Leitner items, `drill` («тренировка»). */
+export const StartReviewBody = z.object({ mode: ReviewMode });
+export type StartReviewBody = z.infer<typeof StartReviewBody>;
+
+/**
+ * `200` answer of `POST /api/review/start` (`204` when there is nothing to ask). `hearts` and
+ * `presentation` extend spec §5.1 the same way as `StartLessonResponse`.
+ */
+export const StartReviewResponse = z.object({
+  sessionId: z.uuid(),
+  taskIds: z.array(z.string()).min(1),
+  hearts: HeartsDto,
+  /** Send it back with the answer to `taskIds[0]`. */
+  presentation: z.number().int().positive(),
+});
+export type StartReviewResponse = z.infer<typeof StartReviewResponse>;
+
 /**
  * `POST /api/sessions/:id/answer`. `presentation` (an addition to spec §5.1) makes a retried
  * request idempotent (§9): the same `taskId` + `presentation` returns the first response.
@@ -61,7 +81,7 @@ export const LessonSummaryDto = z.object({
 export const ReviewSummaryDto = z.object({
   ...SummaryBase,
   kind: z.literal('review'),
-  mode: z.enum(['review', 'drill']),
+  mode: ReviewMode,
   correct: Count,
   total: Count,
   heartGained: z.boolean(),

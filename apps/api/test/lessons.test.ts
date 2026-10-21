@@ -22,6 +22,7 @@ import {
   type ContentHolder,
   type ContentStore,
 } from '../src/services/contentStore.js';
+import { rightAnswer, wrongAnswer } from './answers.js';
 import { buildCourse, MINI_CONTENT, tempContentDir } from './course.js';
 import { harnessAppDeps, TEST_PUBLIC_ORIGIN, useHarness } from './harness.js';
 
@@ -82,44 +83,6 @@ function task(id: string): Task {
   const t = active!.task(id);
   if (!t) throw new Error(`no task ${id}`);
   return t;
-}
-
-function rightAnswer(t: Task): UserAnswer {
-  switch (t.type) {
-    case 'single_choice':
-      return { type: 'single_choice', selectedIndex: t.correctIndex };
-    case 'true_false':
-      return { type: 'true_false', value: t.answer };
-    case 'assemble':
-      return { type: 'assemble', tokens: t.answer };
-    case 'fill_blank':
-      return { type: 'fill_blank', text: t.acceptedAnswers[0]! };
-    case 'match_pairs':
-      return { type: 'match_pairs', pairs: t.pairs };
-    case 'order_steps':
-      return { type: 'order_steps', order: t.steps };
-    case 'terminal_practice':
-      throw new Error('terminal_practice has no answer');
-  }
-}
-
-function wrongAnswer(t: Task): UserAnswer {
-  switch (t.type) {
-    case 'single_choice':
-      return { type: 'single_choice', selectedIndex: (t.correctIndex + 1) % t.options.length };
-    case 'true_false':
-      return { type: 'true_false', value: !t.answer };
-    case 'assemble':
-      return { type: 'assemble', tokens: ['nope'] };
-    case 'fill_blank':
-      return { type: 'fill_blank', text: 'nope' };
-    case 'match_pairs':
-      return { type: 'match_pairs', pairs: [] };
-    case 'order_steps':
-      return { type: 'order_steps', order: [...t.steps].reverse() };
-    case 'terminal_practice':
-      throw new Error('terminal_practice has no answer');
-  }
 }
 
 function start(cookies: Cookies, lessonId: string) {
@@ -452,7 +415,10 @@ describe('POST /api/sessions/:id/answer', () => {
     const xp = await xpOf(id);
     expect(xp.events).toHaveLength(0);
     expect(xp.totalXp).toBe(0);
-    expect((await answer(cookies, s.sessionId, body)).statusCode).toBe(409);
+    // A closed content_changed session keeps answering with that code.
+    const again = await answer(cookies, s.sessionId, body);
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ error: { code: 'content_changed' } });
 
     // The client restarts the lesson on the new version.
     const s2 = await startOk(cookies, L1);
