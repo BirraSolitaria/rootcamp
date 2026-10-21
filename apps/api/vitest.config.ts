@@ -12,5 +12,8 @@ export default defineConfig({
   ssr: { resolve: { conditions } },
   test: {
     include: ['test/**/*.test.ts'],
+    // argon2id verify (64 MiB, t=3) runs per login; loops of 20-40 logins exceed the 5 s
+    // default on 2-core CI runners. Slow Testcontainers hooks set their own 60 s explicitly.
+    testTimeout: 30_000,
   },
 });
