@@ -169,6 +169,35 @@ describe('writeContent and the CLI', () => {
     expect(await readdir(join(dir, 'public'))).toEqual([built.hash]);
   });
 
+  it('leaves no temporary directories next to the served tree', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'content-build-'));
+    const built = buildContent(tree);
+    await writeContent(built, dir);
+    expect((await readdir(dir)).sort()).toEqual(['public', 'server']);
+    expect(await readdir(join(dir, 'public'))).toEqual([built.hash]);
+    expect(await readdir(join(dir, 'server'))).toEqual([built.hash]);
+  });
+
+  it('keeps an existing <hash> directory as is (same hash = same content)', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'content-build-'));
+    const built = buildContent(tree);
+    await writeContent(built, dir);
+    const marker = join(dir, 'public', built.hash, 'marker');
+    await writeFile(marker, 'x');
+    await writeContent(built, dir);
+    expect(await readFile(marker, 'utf8')).toBe('x');
+  });
+
+  it('writes the server part before the public part', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'content-build-'));
+    const built = buildContent(tree);
+    // A file where public/ must go makes the public write fail after the server part is done.
+    await writeFile(join(dir, 'public'), 'not a directory');
+    await expect(writeContent(built, dir)).rejects.toThrow();
+    expect(await readdir(join(dir, 'server'))).toEqual([built.hash]);
+    expect((await readdir(dir)).sort()).toEqual(['public', 'server']);
+  });
+
   it('build prints the version; --update-published-ids appends new IDs', async () => {
     dir = await mkdtemp(join(tmpdir(), 'content-build-'));
     await cp(MINI, join(dir, 'src'), { recursive: true });

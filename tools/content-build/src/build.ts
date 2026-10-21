@@ -153,29 +153,44 @@ function baseName(file: string): string {
 }
 
 /**
- * Writes `outDir/public/<hash>/…` and `outDir/server/<hash>/…`. Each tree is
- * written to a temporary sibling and renamed into place, so a reader never sees
- * a half-written version. An existing `<hash>` directory is replaced (same
- * hash means the same content).
+ * Writes `outDir/server/<hash>/…` first, then `outDir/public/<hash>/…`, so a version
+ * that clients can see always has its server part. Each tree is assembled under
+ * `outDir/.tmp-<random>/` (a sibling of `public/`, never inside the served tree)
+ * and renamed into place in one step, so a reader never sees a half-written
+ * version. An existing `<hash>` directory is kept as is: the same hash means the
+ * same content.
  */
 export async function writeContent(built: BuiltContent, outDir: string): Promise<void> {
-  for (const [part, files] of [
-    ['public', built.public],
-    ['server', built.server],
-  ] as const) {
-    const target = join(outDir, part, built.hash);
-    const tmp = `${target}.tmp-${randomBytes(4).toString('hex')}`;
-    try {
+  const tmpRoot = join(outDir, `.tmp-${randomBytes(4).toString('hex')}`);
+  try {
+    for (const [part, files] of [
+      ['server', built.server],
+      ['public', built.public],
+    ] as const) {
+      const target = join(outDir, part, built.hash);
+      if (await exists(target)) continue;
+      const tmp = join(tmpRoot, part);
       for (const [rel, value] of Object.entries(files)) {
         const file = join(tmp, rel);
         await mkdir(dirname(file), { recursive: true });
-        await writeFile(file, typeof value === 'string' ? value : `${JSON.stringify(value)}\n`);
+        await writeFile(
+          file,
+          typeof value === 'string'
+            ? value
+            : `${JSON.stringify(value)}
+`,
+        );
       }
-      if (await exists(target)) await rm(target, { recursive: true, force: true });
-      await rename(tmp, target);
-    } finally {
-      await rm(tmp, { recursive: true, force: true });
+      await mkdir(dirname(target), { recursive: true });
+      try {
+        await rename(tmp, target);
+      } catch (err) {
+        // A concurrent build of the same version won the race: its copy is identical.
+        if (!(await exists(target))) throw err;
+      }
     }
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
   }
 }
 
