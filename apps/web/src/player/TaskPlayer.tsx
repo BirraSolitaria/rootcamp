@@ -85,7 +85,12 @@ function PlayerInner({ task, presentation, onSubmit, feedback, onContinue, rng }
       </section>
       <div className={styles.footer}>
         {feedback ? (
-          <FeedbackBanner {...feedback} onContinue={onContinue} />
+          // A changed verdict (the server overruling the local check) is a new banner.
+          <FeedbackBanner
+            key={feedback.correct ? 'ok' : 'bad'}
+            {...feedback}
+            onContinue={onContinue}
+          />
         ) : task.type === 'terminal_practice' ? null : (
           <div className={styles.footerInner}>
             <button

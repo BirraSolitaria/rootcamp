@@ -1,6 +1,6 @@
 import { ContentVersionDto, ProgressDto } from '@rootcamp/api-contract';
 import type { Catalog, Section } from '@rootcamp/content-schema';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { ApiClientError, apiFetch } from '../api/client';
 
 export const PROGRESS_KEY = ['progress'] as const;
@@ -54,6 +54,29 @@ export function useSection(sectionId: string | null) {
     `section:${sectionId ?? ''}`,
     sectionId === null ? null : `sections/${sectionId}.json`,
   );
+}
+
+/**
+ * Several `sections/<id>.json` at once (a review mixes tasks of many sections); same cache
+ * entries as `useSection`. `data` once every file is loaded.
+ */
+export function useSections(sectionIds: readonly string[]): ContentFile<Section[]> {
+  const version = useContentVersion();
+  const v = version.data;
+  const queries = useQueries({
+    queries: sectionIds.map((id) => ({
+      queryKey: ['content', v?.version, `section:${id}`],
+      queryFn: () => apiFetch<Section>(`${v?.baseUrl ?? ''}sections/${id}.json`),
+      enabled: v !== undefined,
+      staleTime: Infinity,
+      retry,
+    })),
+  });
+  const error = version.error ?? queries.find((q) => q.error)?.error ?? null;
+  const data = queries.every((q) => q.data !== undefined)
+    ? queries.map((q) => q.data as Section)
+    : undefined;
+  return { data, error, isPending: data === undefined && error === null };
 }
 
 /** `GET /api/progress` against the active version. */

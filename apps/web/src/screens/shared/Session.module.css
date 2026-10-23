@@ -1,0 +1,152 @@
+/* Lesson / review: one column of at most 520 px, the player fills the screen height. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg) 0;
+}
+
+.exit {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  margin-left: calc(-1 * var(--space-md));
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font: 400 20px/1 var(--font-mono);
+  text-decoration: none;
+}
+
+.exit:hover {
+  color: var(--ink);
+}
+
+.player {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.player > * {
+  flex: 1;
+}
+
+.center {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 60vh;
+}
+
+.message {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-xxl) var(--space-lg);
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+/* «Нет связи»: under the top bar, in the lesson column. */
+.net {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: calc(100% - 2 * var(--space-lg));
+  max-width: calc(520px - 2 * var(--space-lg));
+  margin: var(--space-md) auto 0;
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-lg);
+  border: 1px solid var(--coral);
+  border-radius: var(--radius-md);
+  background: var(--coral-bg);
+  color: var(--coral-ink);
+  font: 600 15px/22px var(--font-sans);
+}
+
+.net span {
+  flex: 1;
+}
+
+.toast {
+  position: fixed;
+  top: var(--space-lg);
+  left: 50%;
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--space-lg));
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 15px/22px var(--font-sans);
+  transform: translateX(-50%);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: var(--scrim);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+
+/* Review intro and «Пока нечего тренировать» (inside the shell). */
+.intro {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-xxl) var(--space-lg);
+  text-align: center;
+}
+
+.introTitle {
+  font: 700 26px/33px var(--font-display);
+  color: var(--ink);
+}
+
+.introText {
+  font: 400 16px/24px var(--font-sans);
+  color: var(--muted);
+}
+
+.wide {
+  width: 100%;
+}

@@ -11,7 +11,9 @@ import { Login } from './screens/auth/Login';
 import { Register } from './screens/auth/Register';
 import { Reset } from './screens/auth/Reset';
 import { Verify } from './screens/auth/Verify';
+import { LessonScreen } from './screens/Lesson/LessonScreen';
 import { PathIndex, PathScreen } from './screens/Path/PathScreen';
+import { ReviewScreen } from './screens/Review/ReviewScreen';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
@@ -44,6 +46,14 @@ export function App() {
             <Route
               path="/track/:trackId"
               element={<RequireUser>{(me) => <PathScreen me={me} />}</RequireUser>}
+            />
+            <Route
+              path="/lesson/:lessonId"
+              element={<RequireUser>{(me) => <LessonScreen me={me} />}</RequireUser>}
+            />
+            <Route
+              path="/review"
+              element={<RequireUser>{(me) => <ReviewScreen me={me} />}</RequireUser>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

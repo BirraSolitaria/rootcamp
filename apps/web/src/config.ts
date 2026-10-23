@@ -4,7 +4,7 @@
  */
 export const features = {
   practice: false,
-  review: false,
+  review: true,
   leaderboard: false,
   profile: false,
   admin: false,
