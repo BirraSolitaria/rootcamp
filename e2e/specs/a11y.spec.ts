@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { currentTask, giveAnswer, lessonTasks, taskArea } from '../helpers/answers';
+import {
+  checkAndContinue,
+  currentTask,
+  giveAnswer,
+  lessonTasks,
+  taskArea,
+  type TaskType,
+} from '../helpers/answers';
 import { registerAndVerify, uniqueNick } from '../helpers/users';
 
 /** axe violations of impact `serious` or `critical`, as short readable lines. */
@@ -17,9 +24,11 @@ async function seriousViolations(page: Page): Promise<string[]> {
     );
 }
 
-// Spec §10.4: «Путь» and «Урок» (theory, a task, the answer banner) without serious/critical
-// axe violations.
+// Spec §10.4: «Путь» and «Урок» without serious/critical axe violations. The lesson is checked
+// on the theory card, on the first task of each type (before and after «Проверить», one answer
+// wrong so both banners are seen) and on the summary.
 test('доступность: Путь и Урок без нарушений serious/critical', async ({ page }) => {
+  const tasks = lessonTasks();
   await registerAndVerify(page, uniqueNick('a11y'));
 
   await page.goto('/');
@@ -32,12 +41,32 @@ test('доступность: Путь и Урок без нарушений ser
   expect(await seriousViolations(page), 'Урок: теория').toEqual([]);
 
   await page.getByRole('button', { name: 'Начать задания' }).click();
-  await expect(taskArea(page)).toBeVisible();
-  expect(await seriousViolations(page), 'Урок: задание').toEqual([]);
+  const seen = new Set<TaskType>();
+  let wrongGiven = false;
+  while (await taskArea(page).isVisible()) {
+    const task = await currentTask(page, tasks);
+    const first = !seen.has(task.type);
+    seen.add(task.type);
+    if (first) expect(await seriousViolations(page), `Урок: ${task.type}`).toEqual([]);
+    const correct = wrongGiven || task.type !== 'true_false';
+    if (!correct) wrongGiven = true;
+    await giveAnswer(page, task, correct);
+    if (first) {
+      expect(await seriousViolations(page), `Урок: ${task.type}, ответ собран`).toEqual([]);
+    }
+    await checkAndContinue(page, correct, async () => {
+      if (first) {
+        expect(await seriousViolations(page), `Урок: ${task.type}, баннер`).toEqual([]);
+      }
+    });
+  }
+  expect(seen.size).toBe(6);
 
-  const task = await currentTask(page, lessonTasks());
-  await giveAnswer(page, task, false);
-  await page.getByRole('button', { name: 'Проверить' }).click();
-  await expect(page.getByRole('button', { name: 'Продолжить' })).toBeFocused();
-  expect(await seriousViolations(page), 'Урок: ответ').toEqual([]);
+  await expect(page.getByRole('heading', { name: 'Урок пройден' })).toBeVisible();
+  expect(await seriousViolations(page), 'Урок: итог').toEqual([]);
+
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await expect(page).toHaveURL(/\/track\/t1$/);
+  await expect(page.getByRole('link', { name: /слой/ }).first()).toBeVisible();
+  expect(await seriousViolations(page), 'Путь после урока').toEqual([]);
 });

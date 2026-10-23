@@ -138,9 +138,14 @@ function escapeRe(s: string): string {
 /**
  * Presses «Проверить» and checks both verdicts: the banner («Верно!» / «Неверно») and the
  * server's `correct` in the answer response. Then presses «Продолжить» and waits for what comes
- * next: another task, the summary or «Сердечки кончились».
+ * next: another task, the summary or «Сердечки кончились». `onBanner` runs while the banner
+ * is up.
  */
-export async function checkAndContinue(page: Page, expectCorrect: boolean): Promise<void> {
+export async function checkAndContinue(
+  page: Page,
+  expectCorrect: boolean,
+  onBanner?: () => Promise<void>,
+): Promise<void> {
   const answered = page.waitForResponse(
     (r) => r.request().method() === 'POST' && /\/api\/sessions\/[^/]+\/answer$/.test(r.url()),
   );
@@ -152,9 +157,11 @@ export async function checkAndContinue(page: Page, expectCorrect: boolean): Prom
   const banner = page
     .getByRole('status')
     .filter({ has: page.getByRole('button', { name: 'Продолжить' }) });
+  // Its title; «Правильно: Неверно» of a true_false is a <pre>.
   await expect(
-    banner.getByText(expectCorrect ? 'Верно!' : 'Неверно', { exact: true }),
+    banner.getByRole('paragraph').filter({ hasText: expectCorrect ? /^Верно!$/ : /^Неверно$/ }),
   ).toBeVisible();
+  await onBanner?.();
   await banner.getByRole('button', { name: 'Продолжить' }).click();
   await expect(
     page
