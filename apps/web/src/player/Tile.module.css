@@ -117,8 +117,9 @@
   cursor: default;
 }
 
+/* Keeps the tile's size; hidden rather than transparent, so it is not text at 1:1 contrast. */
 .ghost .label {
-  color: transparent;
+  visibility: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
