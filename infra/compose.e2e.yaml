@@ -4,9 +4,12 @@
 #   docker compose -p rootcamp-e2e --env-file infra/versions.env \
 #     -f infra/compose.yaml -f infra/compose.e2e.yaml up -d --build --wait
 # Site http://127.0.0.1:8081 (R-M2-4: not localhost) · Mailpit http://127.0.0.1:8026
-# Postgres is not published. Rate limits are the production ones: the registration scenario
-# registers once per Playwright project (2 per run from one IP, under `register` 3/h), and
-# `down -v` + a fresh api process reset the in-memory counters between runs.
+# Postgres is not published. Course content is baked into the images (R-M3-3); the one-shot
+# `content-init` migrates the database and activates the api image's only version before `api`
+# starts, so the stand serves the course from its first request.
+# Rate limits are the production ones except `register` (R-M3-5): every scenario registers its
+# own user, 5 per Playwright project and 10 per run from one IP. `down -v` + a fresh api
+# process reset the in-memory counters between runs.
 name: rootcamp-e2e
 
 services:
@@ -34,9 +37,35 @@ services:
       # Throwaway values for a disposable stand.
       INTERNAL_TOKEN: e2e-internal-token-not-secret
       TICKET_SECRET: e2e-ticket-secret-not-secret-0123456789
+      # R-M3-5: 5 scenarios × 2 Playwright projects register from one IP (production: 3/h).
+      RATE_LIMIT_REGISTER_IP_PER_HOUR: '20'
     depends_on:
       mailpit:
         condition: service_healthy
+      content-init:
+        condition: service_completed_successfully
+
+  # One-shot, on the api image (built by `api`, so never pulled): the api's migrations (the
+  # `settings` table must exist), then `content:activate` of the version baked into the image
+  # (content-dist/server holds exactly one). `api` starts after it exits 0 and loads that version.
+  content-init:
+    image: rootcamp/api:e2e
+    environment:
+      DATABASE_URL: postgres://rootcamp:rootcamp-e2e@postgres:5432/rootcamp
+    command:
+      - sh
+      - -ec
+      - |
+        node --input-type=module -e "
+          import { createDb, runMigrations } from '@rootcamp/db';
+          const h = createDb(process.env.DATABASE_URL, { max: 2 });
+          try { await runMigrations(h.db, '/app/drizzle'); } finally { await h.close(); }"
+        node dist/cli.js content:activate "$$(ls content-dist/server)"
+    networks: [rc-internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
 
   caddy:
     image: rootcamp/web:e2e
