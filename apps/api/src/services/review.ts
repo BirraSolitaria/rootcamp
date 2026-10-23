@@ -128,6 +128,7 @@ export async function startReview(
       taskIds: session.taskIds,
       hearts: heartsDto(regen(hearts, now), now),
       presentation: session.presentation,
+      contentVersion: store.version,
     };
   });
 }

@@ -172,6 +172,7 @@ describe('POST /api/lessons/:lessonId/start', () => {
     expect(s.queue).toEqual(v1.lesson(L1)!.tasks.map((t) => t.id));
     expect(s.presentation).toBe(1);
     expect(s.hearts).toEqual({ count: 5, msToNext: null });
+    expect(s.contentVersion).toBe(v1.version);
     const row = await sessionRow(s.sessionId);
     expect(row).toMatchObject({
       kind: 'lesson',
@@ -422,6 +423,7 @@ describe('POST /api/sessions/:id/answer', () => {
 
     // The client restarts the lesson on the new version.
     const s2 = await startOk(cookies, L1);
+    expect(s2.contentVersion).toBe(v2.version);
     expect((await sessionRow(s2.sessionId)).contentVersion).toBe(v2.version);
   });
 

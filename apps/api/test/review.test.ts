@@ -239,6 +239,7 @@ describe('POST /api/review/start', () => {
     expect(s.taskIds).toEqual([missed]);
     expect(s.presentation).toBe(1);
     expect(s.hearts).toEqual({ count: 5, msToNext: null });
+    expect(s.contentVersion).toBe(v1.version);
     expect(await sessionRow(s.sessionId)).toMatchObject({
       userId: id,
       kind: 'review',

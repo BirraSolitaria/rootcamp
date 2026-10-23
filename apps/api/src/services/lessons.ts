@@ -136,6 +136,7 @@ export async function startLessonSession(
       hearts: heartsDto(started.hearts, now),
       queue: session.queue,
       presentation: session.presentation,
+      contentVersion: store.version,
     };
   });
 }

@@ -108,6 +108,7 @@ const server = setupServer(
       taskIds: ['t1.s01.l01.t01', 't7.s02.l01.t01'],
       hearts: { count: 2, msToNext: 60_000 },
       presentation: 1,
+      contentVersion: VERSION,
     });
   }),
   http.post('*/api/sessions/:id/answer', () => HttpResponse.json(answerResponse())),

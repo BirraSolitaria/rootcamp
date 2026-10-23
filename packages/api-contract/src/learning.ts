@@ -20,6 +20,12 @@ export type UserAnswer = z.infer<typeof UserAnswer>;
 export const HeartsDto = z.object({ count: Count, msToNext: z.number().nonnegative().nullable() });
 export type HeartsDto = z.infer<typeof HeartsDto>;
 
+/**
+ * Content version the session was started on (an addition to spec §5.1): the client loads its
+ * tasks from `/content/<contentVersion>/`, refetching `GET /api/content/version` on a mismatch.
+ */
+const SessionContentVersion = z.string().regex(/^[0-9a-f]{12}$/);
+
 /** `POST /api/lessons/:lessonId/start`: the session shows `queue[0]` with `presentation`. */
 export const StartLessonResponse = z.object({
   sessionId: z.uuid(),
@@ -27,6 +33,7 @@ export const StartLessonResponse = z.object({
   queue: z.array(z.string()),
   /** Send it back with the answer to `queue[0]`. */
   presentation: z.number().int().positive(),
+  contentVersion: SessionContentVersion,
 });
 export type StartLessonResponse = z.infer<typeof StartLessonResponse>;
 
@@ -47,6 +54,7 @@ export const StartReviewResponse = z.object({
   hearts: HeartsDto,
   /** Send it back with the answer to `taskIds[0]`. */
   presentation: z.number().int().positive(),
+  contentVersion: SessionContentVersion,
 });
 export type StartReviewResponse = z.infer<typeof StartReviewResponse>;
 

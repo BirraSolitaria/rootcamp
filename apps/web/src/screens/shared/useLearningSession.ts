@@ -1,6 +1,7 @@
 import {
   AnswerResponse,
   type AnswerBody,
+  type ContentVersionDto,
   type HeartsDto,
   MeDto,
   type ReviewMode,
@@ -14,7 +15,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ApiClientError, apiFetch } from '../../api/client';
 import { ME_KEY } from '../../api/queries';
-import { PROGRESS_KEY, useSections } from '../../content/useContent';
+import {
+  CONTENT_VERSION_KEY,
+  PROGRESS_KEY,
+  refreshContentVersion,
+  useSections,
+} from '../../content/useContent';
 import type { Feedback } from '../../player/TaskPlayer';
 
 /** What to play: one lesson, or a review / drill («тренировка»). */
@@ -160,7 +166,7 @@ function isNetworkError(err: unknown): boolean {
  * (null: not yet), loads the sections holding its tasks, checks an answer locally (the banner
  * shows at once) and sends it; the server's verdict replaces the local one. A send lost to the
  * network is retried up to 3 times with the same `presentation` (idempotent), then waits for
- * «Повторить». `409 content_changed` restarts the session with a toast.
+ * «Повторить». `409 content_changed` restarts the session with a toast, on the reloaded version.
  */
 export function useLearningSession(kind: LearningKind | null) {
   const qc = useQueryClient();
@@ -184,57 +190,80 @@ export function useLearningSession(kind: LearningKind | null) {
     [qc],
   );
 
-  const start = useCallback(async () => {
-    const k = kindRef.current;
-    if (k === null) return;
-    const g = ++gen.current;
-    dispatch({ type: 'start' });
-    try {
-      if (k.kind === 'lesson') {
-        const res = await apiFetch(
-          `/api/lessons/${encodeURIComponent(k.lessonId)}/start`,
-          { method: 'POST' },
-          StartLessonResponse,
-        );
+  /**
+   * Starts a session. `resync` (a restart after an error or `409 content_changed`) first reloads
+   * the active content version, which is cached forever otherwise. The session's own
+   * `contentVersion` is checked too: a tab left open across a content redeploy would look its
+   * tasks up in the old version's files.
+   */
+  const start = useCallback(
+    async (resync = false) => {
+      const k = kindRef.current;
+      if (k === null) return;
+      const g = ++gen.current;
+      dispatch({ type: 'start' });
+      const syncVersion = async (sessionVersion: string) => {
+        const cached = qc.getQueryData<ContentVersionDto>(CONTENT_VERSION_KEY);
+        if (cached !== undefined && cached.version !== sessionVersion) {
+          await refreshContentVersion(qc);
+        }
+      };
+      try {
+        if (resync) {
+          await refreshContentVersion(qc);
+          if (g !== gen.current) return;
+        }
+        if (k.kind === 'lesson') {
+          const res = await apiFetch(
+            `/api/lessons/${encodeURIComponent(k.lessonId)}/start`,
+            { method: 'POST' },
+            StartLessonResponse,
+          );
+          if (g !== gen.current) return;
+          await syncVersion(res.contentVersion);
+          if (g !== gen.current) return;
+          const first = res.queue[0];
+          if (first === undefined) throw new Error('empty lesson queue');
+          setTaskIds(res.queue);
+          setMeHearts(res.hearts);
+          dispatch({ type: 'started', task: fresh(res.sessionId, first, res, res.queue.length) });
+        } else {
+          const res = await apiFetch(
+            '/api/review/start',
+            { method: 'POST', json: { mode: k.mode } },
+            StartReviewResponse.optional(),
+          );
+          if (g !== gen.current) return;
+          if (res === undefined) return dispatch({ type: 'empty' });
+          await syncVersion(res.contentVersion);
+          if (g !== gen.current) return;
+          setTaskIds(res.taskIds);
+          setMeHearts(res.hearts);
+          dispatch({
+            type: 'started',
+            task: fresh(res.sessionId, res.taskIds[0]!, res, res.taskIds.length),
+          });
+        }
+      } catch (err) {
         if (g !== gen.current) return;
-        const first = res.queue[0];
-        if (first === undefined) throw new Error('empty lesson queue');
-        setTaskIds(res.queue);
-        setMeHearts(res.hearts);
-        dispatch({ type: 'started', task: fresh(res.sessionId, first, res, res.queue.length) });
-      } else {
-        const res = await apiFetch(
-          '/api/review/start',
-          { method: 'POST', json: { mode: k.mode } },
-          StartReviewResponse.optional(),
-        );
-        if (g !== gen.current) return;
-        if (res === undefined) return dispatch({ type: 'empty' });
-        setTaskIds(res.taskIds);
-        setMeHearts(res.hearts);
-        dispatch({
-          type: 'started',
-          task: fresh(res.sessionId, res.taskIds[0]!, res, res.taskIds.length),
-        });
+        if (err instanceof ApiClientError && err.code === 'no_hearts') {
+          // The refusal carries no timer: take it from a fresh `GET /api/me`.
+          const latest = await qc
+            .fetchQuery({
+              queryKey: ME_KEY,
+              queryFn: () => apiFetch('/api/me', undefined, MeDto),
+              staleTime: 0,
+            })
+            .catch(() => undefined);
+          if (g !== gen.current) return;
+          dispatch({ type: 'out_of_hearts', msToNext: latest?.hearts.msToNext ?? null });
+        } else {
+          dispatch({ type: 'fail', error: err });
+        }
       }
-    } catch (err) {
-      if (g !== gen.current) return;
-      if (err instanceof ApiClientError && err.code === 'no_hearts') {
-        // The refusal carries no timer: take it from a fresh `GET /api/me`.
-        const latest = await qc
-          .fetchQuery({
-            queryKey: ME_KEY,
-            queryFn: () => apiFetch('/api/me', undefined, MeDto),
-            staleTime: 0,
-          })
-          .catch(() => undefined);
-        if (g !== gen.current) return;
-        dispatch({ type: 'out_of_hearts', msToNext: latest?.hearts.msToNext ?? null });
-      } else {
-        dispatch({ type: 'fail', error: err });
-      }
-    }
-  }, [qc, setMeHearts]);
+    },
+    [qc, setMeHearts],
+  );
 
   useEffect(() => {
     if (key === null) return;
@@ -269,10 +298,8 @@ export function useLearningSession(kind: LearningKind | null) {
           if (!isNetworkError(err)) {
             if (err instanceof ApiClientError && err.code === 'content_changed') {
               setToast(CONTENT_CHANGED_TOAST);
-              // The new version brings new section files; progress may have changed too.
-              void qc.invalidateQueries({ queryKey: ['content', 'version'] });
-              void qc.invalidateQueries({ queryKey: PROGRESS_KEY });
-              return void start();
+              // The new version (and progress) is loaded before the new session shows a task.
+              return void start(true);
             }
             return dispatch({ type: 'fail', error: err });
           }
@@ -283,7 +310,7 @@ export function useLearningSession(kind: LearningKind | null) {
         }
       }
     },
-    [qc, start, setMeHearts],
+    [start, setMeHearts],
   );
 
   // Tasks come from the public section files of the active content version.
@@ -326,6 +353,9 @@ export function useLearningSession(kind: LearningKind | null) {
 
   const onContinue = useCallback(() => dispatch({ type: 'continue' }), []);
 
+  /** «Начать заново»: reloads the content version, then starts a new session. */
+  const restart = useCallback(() => start(true), [start]);
+
   // The summary changed XP, hearts, streak and progress.
   const finished = state.phase === 'summary';
   useEffect(() => {
@@ -343,7 +373,7 @@ export function useLearningSession(kind: LearningKind | null) {
     submit,
     onContinue,
     retry,
-    restart: start,
+    restart,
   };
 }
 

@@ -1,4 +1,10 @@
-import type { AnswerBody, AnswerResponse, ContentVersionDto, MeDto } from '@rootcamp/api-contract';
+import type {
+  AnswerBody,
+  AnswerResponse,
+  ContentVersionDto,
+  MeDto,
+  StartLessonResponse,
+} from '@rootcamp/api-contract';
 import type { Section, Task } from '@rootcamp/content-schema';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
@@ -24,20 +30,27 @@ const pwd: Task = {
   explanation: 'pwd — print working directory.',
 };
 
-const section: Section = {
-  id: 't7.s05',
-  title: 'Тома',
-  description: '',
-  lessons: [
-    {
-      id: LESSON,
-      kind: 'lesson',
-      title: 'Именованные тома',
-      theory: { title: 'Тома переживают контейнер', blocks: [{ type: 'text', text: 'Теория.' }] },
-      tasks: [pwd],
-    },
-  ],
-};
+function makeSection(task: Task): Section {
+  return {
+    id: 't7.s05',
+    title: 'Тома',
+    description: '',
+    lessons: [
+      {
+        id: LESSON,
+        kind: 'lesson',
+        title: 'Именованные тома',
+        theory: {
+          title: 'Тома переживают контейнер',
+          blocks: [{ type: 'text', text: 'Теория.' }],
+        },
+        tasks: [task],
+      },
+    ],
+  };
+}
+
+const section = makeSection(pwd);
 
 const me: MeDto = { ...meDto({ emailVerified: true }), hearts: { count: 5, msToNext: null } };
 
@@ -88,7 +101,8 @@ const server = setupServer(
       hearts: { count: 5, msToNext: null },
       queue: [pwd.id],
       presentation: 1,
-    });
+      contentVersion: VERSION,
+    } satisfies StartLessonResponse);
   }),
   http.post('*/api/sessions/:id/answer', async ({ request }) => {
     answers.push((await request.json()) as AnswerBody);
@@ -112,9 +126,11 @@ function LocationProbe() {
   return <output data-testid="location">{loc.pathname}</output>;
 }
 
-function renderLesson() {
+function renderLesson(cachedVersion?: ContentVersionDto) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['me'], me);
+  // A tab that loaded the version earlier: it stays cached (staleTime: Infinity).
+  if (cachedVersion) client.setQueryData(['content', 'version'], cachedVersion);
   const result = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/lesson/${LESSON}`]} future={ROUTER_FUTURE}>
@@ -262,5 +278,38 @@ describe('Lesson screen', () => {
     expect(starts).toBe(2);
     // the restarted lesson shows the task again, unanswered
     expect(await screen.findByRole('button', { name: 'Проверить' })).toBeDisabled();
+  });
+
+  it('a session started on a newer content version loads its sections and shows its text', async () => {
+    const V2 = '0123456789ab';
+    const pwd2: Task = { ...pwd, question: 'Где ты сейчас? Выбери команду.' };
+    const v2Sections: string[] = [];
+    server.use(
+      http.get('*/api/content/version', () =>
+        HttpResponse.json({ version: V2, baseUrl: `/content/${V2}/` } satisfies ContentVersionDto),
+      ),
+      http.get(`*/content/${V2}/sections/:file`, ({ params }) => {
+        v2Sections.push(String(params.file));
+        return HttpResponse.json(makeSection(pwd2));
+      }),
+      http.post(`*/api/lessons/${LESSON}/start`, () =>
+        HttpResponse.json({
+          sessionId: SESSION,
+          hearts: { count: 5, msToNext: null },
+          queue: [pwd2.id],
+          presentation: 1,
+          contentVersion: V2,
+        } satisfies StartLessonResponse),
+      ),
+    );
+    // The tab still holds v1 from before the redeploy.
+    const { client } = renderLesson({ version: VERSION, baseUrl: `/content/${VERSION}/` });
+    const ev = userEvent.setup();
+    await ev.click(await screen.findByRole('button', { name: 'Начать задания' }));
+
+    expect(await screen.findByText(pwd2.question)).toBeInTheDocument();
+    expect(screen.queryByText(pwd.question)).toBeNull();
+    expect(v2Sections).toEqual(['t7.s05.json']);
+    expect(client.getQueryData<ContentVersionDto>(['content', 'version'])?.version).toBe(V2);
   });
 });

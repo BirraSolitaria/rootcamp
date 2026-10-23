@@ -1,18 +1,39 @@
 import { ContentVersionDto, ProgressDto } from '@rootcamp/api-contract';
 import type { Catalog, Section } from '@rootcamp/content-schema';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { type QueryClient, useQueries, useQuery } from '@tanstack/react-query';
 import { ApiClientError, apiFetch } from '../api/client';
 
 export const PROGRESS_KEY = ['progress'] as const;
+export const CONTENT_VERSION_KEY = ['content', 'version'] as const;
 
 const retry = (count: number, err: Error) => !(err instanceof ApiClientError) && count < 2;
 
-/** `GET /api/content/version`: the active content hash and its public base url. */
+const fetchContentVersion = () => apiFetch('/api/content/version', undefined, ContentVersionDto);
+
+/**
+ * `GET /api/content/version`: the active content hash and its public base url. Cached until
+ * something shows it moved on (`refreshContentVersion`): a session started on another version,
+ * or `409 content_changed`.
+ */
 export function useContentVersion() {
   return useQuery({
-    queryKey: ['content', 'version'],
-    queryFn: () => apiFetch('/api/content/version', undefined, ContentVersionDto),
+    queryKey: CONTENT_VERSION_KEY,
+    queryFn: fetchContentVersion,
     staleTime: Infinity,
+    retry,
+  });
+}
+
+/**
+ * Refetches the active version now and resolves once the cache holds it (the content files
+ * follow it). Progress is computed against the active version: it is refetched too.
+ */
+export function refreshContentVersion(qc: QueryClient): Promise<ContentVersionDto> {
+  void qc.invalidateQueries({ queryKey: PROGRESS_KEY });
+  return qc.fetchQuery({
+    queryKey: CONTENT_VERSION_KEY,
+    queryFn: fetchContentVersion,
+    staleTime: 0,
     retry,
   });
 }
