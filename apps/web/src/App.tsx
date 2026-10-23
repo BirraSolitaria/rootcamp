@@ -5,14 +5,13 @@ import { setNavigator } from './api/client';
 import { ROUTER_FUTURE } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RequireUser } from './components/guards';
-import { Shell } from './layout/Shell';
 import { CheckEmail } from './screens/auth/CheckEmail';
 import { Forgot } from './screens/auth/Forgot';
 import { Login } from './screens/auth/Login';
 import { Register } from './screens/auth/Register';
 import { Reset } from './screens/auth/Reset';
 import { Verify } from './screens/auth/Verify';
-import { Path } from './screens/Path';
+import { PathIndex, PathScreen } from './screens/Path/PathScreen';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
@@ -43,15 +42,11 @@ export function App() {
             />
             <Route
               path="/"
-              element={
-                <RequireUser>
-                  {(me) => (
-                    <Shell isAdmin={me.user.isAdmin}>
-                      <Path me={me} />
-                    </Shell>
-                  )}
-                </RequireUser>
-              }
+              element={<RequireUser>{(me) => <PathIndex me={me} />}</RequireUser>}
+            />
+            <Route
+              path="/track/:trackId"
+              element={<RequireUser>{(me) => <PathScreen me={me} />}</RequireUser>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
