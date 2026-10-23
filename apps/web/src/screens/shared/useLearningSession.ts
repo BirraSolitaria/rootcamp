@@ -2,6 +2,7 @@ import {
   AnswerResponse,
   type AnswerBody,
   type HeartsDto,
+  MeDto,
   type ReviewMode,
   StartLessonResponse,
   StartReviewResponse,
@@ -177,6 +178,12 @@ export function useLearningSession(kind: LearningKind | null) {
   // Bumped by every start and on unmount: answers of an older session are dropped.
   const gen = useRef(0);
 
+  // The header and a later start's «Сердечки кончились» read hearts from the `me` cache.
+  const setMeHearts = useCallback(
+    (hearts: HeartsDto) => qc.setQueryData<MeDto>(ME_KEY, (me) => me && { ...me, hearts }),
+    [qc],
+  );
+
   const start = useCallback(async () => {
     const k = kindRef.current;
     if (k === null) return;
@@ -193,6 +200,7 @@ export function useLearningSession(kind: LearningKind | null) {
         const first = res.queue[0];
         if (first === undefined) throw new Error('empty lesson queue');
         setTaskIds(res.queue);
+        setMeHearts(res.hearts);
         dispatch({ type: 'started', task: fresh(res.sessionId, first, res, res.queue.length) });
       } else {
         const res = await apiFetch(
@@ -203,6 +211,7 @@ export function useLearningSession(kind: LearningKind | null) {
         if (g !== gen.current) return;
         if (res === undefined) return dispatch({ type: 'empty' });
         setTaskIds(res.taskIds);
+        setMeHearts(res.hearts);
         dispatch({
           type: 'started',
           task: fresh(res.sessionId, res.taskIds[0]!, res, res.taskIds.length),
@@ -211,12 +220,21 @@ export function useLearningSession(kind: LearningKind | null) {
     } catch (err) {
       if (g !== gen.current) return;
       if (err instanceof ApiClientError && err.code === 'no_hearts') {
-        dispatch({ type: 'out_of_hearts', msToNext: null });
+        // The refusal carries no timer: take it from a fresh `GET /api/me`.
+        const latest = await qc
+          .fetchQuery({
+            queryKey: ME_KEY,
+            queryFn: () => apiFetch('/api/me', undefined, MeDto),
+            staleTime: 0,
+          })
+          .catch(() => undefined);
+        if (g !== gen.current) return;
+        dispatch({ type: 'out_of_hearts', msToNext: latest?.hearts.msToNext ?? null });
       } else {
         dispatch({ type: 'fail', error: err });
       }
     }
-  }, []);
+  }, [qc, setMeHearts]);
 
   useEffect(() => {
     if (key === null) return;
@@ -244,6 +262,7 @@ export function useLearningSession(kind: LearningKind | null) {
             AnswerResponse,
           );
           if (g !== gen.current) return;
+          setMeHearts(res.hearts);
           return dispatch({ type: 'response', response: res });
         } catch (err) {
           if (g !== gen.current) return;
@@ -264,7 +283,7 @@ export function useLearningSession(kind: LearningKind | null) {
         }
       }
     },
-    [qc, start],
+    [qc, start, setMeHearts],
   );
 
   // Tasks come from the public section files of the active content version.

@@ -114,7 +114,8 @@ function LocationProbe() {
 
 function renderLesson() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  client.setQueryData(['me'], me);
+  const result = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/lesson/${LESSON}`]} future={ROUTER_FUTURE}>
         <Routes>
@@ -125,6 +126,7 @@ function renderLesson() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...result, client };
 }
 
 /** Theory → «Начать задания» → picks «pwd» → «Проверить». */
@@ -196,15 +198,37 @@ describe('Lesson screen', () => {
         nextTaskId: null,
         presentation: 0,
       } satisfies AnswerResponse);
-    renderLesson();
+    const { client } = renderLesson();
     const ev = await answerPwd();
     await screen.findByText('Неверно');
+    // the header's `me` cache follows the answer's hearts
+    expect(client.getQueryData<MeDto>(['me'])?.hearts).toEqual({ count: 0, msToNext: 600_000 });
     await ev.click(screen.getByRole('button', { name: 'Продолжить' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Сердечки кончились' });
     expect(dialog).toHaveTextContent('Следующее сердечко через 10:00');
     await ev.click(within(dialog).getByRole('button', { name: 'К повторению' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/review');
+  });
+
+  it('a start refused with no_hearts shows the timer from a fresh /api/me', async () => {
+    server.use(
+      http.post(`*/api/lessons/${LESSON}/start`, () =>
+        HttpResponse.json(
+          { error: { code: 'no_hearts', message: 'no hearts left' } },
+          { status: 403 },
+        ),
+      ),
+      http.get('*/api/me', () =>
+        HttpResponse.json({ ...me, hearts: { count: 0, msToNext: 120_000 } } satisfies MeDto),
+      ),
+    );
+    // the cached `me` is stale: full hearts, no timer
+    const { client } = renderLesson();
+
+    const dialog = await screen.findByRole('dialog', { name: 'Сердечки кончились' });
+    expect(dialog).toHaveTextContent('Следующее сердечко через 02:00');
+    expect(client.getQueryData<MeDto>(['me'])?.hearts.count).toBe(0);
   });
 
   it('«Нет связи» + «Повторить» after the retries run out; the retry resends the answer', async () => {
