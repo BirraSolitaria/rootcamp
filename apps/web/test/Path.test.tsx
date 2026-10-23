@@ -160,6 +160,15 @@ describe('Path screen', () => {
     expect(within(review).getByRole('link')).toHaveAttribute('href', '/review');
   });
 
+  it('the chips row scrolls sideways on narrow screens, so the keyboard can reach it', async () => {
+    renderPath('/track/t1');
+    await screen.findByText('СЕЙЧАС');
+
+    // axe scrollable-region-focusable (serious) on 390 px once the row overflows.
+    const chips = screen.getByRole('list', { name: 'Статус' });
+    expect(chips).toHaveAttribute('tabindex', '0');
+  });
+
   it('collapses a finished section into «N слоёв · образ собран»', async () => {
     completed = ['t1.s01.l01', 't1.s01.l02', 't1.s01.l03'];
     renderPath('/track/t1');

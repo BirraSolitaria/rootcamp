@@ -10,10 +10,14 @@ function FlameIcon() {
   );
 }
 
-/** Status chips of the path header: streak, XP today / goal, hearts, rank. */
+/**
+ * Status chips of the path header: streak, XP today / goal, hearts, rank. One row that scrolls
+ * sideways on narrow screens; it holds nothing focusable, so the row itself takes focus (arrow
+ * keys scroll it).
+ */
 export function HeaderChips({ me }: { me: MeDto }) {
   return (
-    <ul className={styles.chips} aria-label="Статус">
+    <ul className={styles.chips} aria-label="Статус" tabIndex={0}>
       <li className={styles.chip} aria-label={`Серия: ${me.streak.current}`}>
         <span className={styles.flame}>
           <FlameIcon />
