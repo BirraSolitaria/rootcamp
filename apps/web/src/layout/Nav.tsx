@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useMatch } from 'react-router-dom';
 import { type Feature, features } from '../config';
 import styles from './Nav.module.css';
 
@@ -21,6 +21,9 @@ export function Nav({
   variant: 'bottom' | 'side';
   isAdmin?: boolean;
 }) {
+  // «Путь» lives at `/track/:trackId` (`/` only redirects there); NavLink's `/` never
+  // matches nested paths, so on a track page the item points at that track and stays active.
+  const track = useMatch('/track/*');
   const items = ITEMS.filter(
     (it) =>
       (!it.feature || features[it.feature]) && (!it.adminOnly || (isAdmin && variant === 'side')),
@@ -32,7 +35,7 @@ export function Nav({
         {items.map((it) => (
           <li key={it.to}>
             <NavLink
-              to={it.to}
+              to={it.to === '/' && track ? track.pathname : it.to}
               end={it.to === '/'}
               className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ''}`}
             >

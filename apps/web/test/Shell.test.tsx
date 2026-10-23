@@ -10,9 +10,9 @@ function setWidth(px: number) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: px });
 }
 
-function renderShell() {
+function renderShell(route = '/') {
   return render(
-    <MemoryRouter future={ROUTER_FUTURE}>
+    <MemoryRouter initialEntries={[route]} future={ROUTER_FUTURE}>
       <Shell aside={<p>правая колонка</p>}>
         <p>контент</p>
       </Shell>
@@ -60,5 +60,13 @@ describe('Shell', () => {
     renderShell();
     expect(screen.getByRole('link', { name: /Путь/ })).toHaveAttribute('href', '/');
     expect(screen.queryByRole('link', { name: /Лидерборд/ })).not.toBeInTheDocument();
+  });
+
+  it('marks «Путь» active on a track page (/track/:trackId)', () => {
+    setWidth(1440);
+    renderShell('/track/t1');
+    const path = screen.getByRole('link', { name: /Путь/ });
+    expect(path).toHaveAttribute('aria-current', 'page');
+    expect(path).toHaveAttribute('href', '/track/t1');
   });
 });
