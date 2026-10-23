@@ -107,7 +107,8 @@
 
 .placeholder {
   font: 400 13px/18px var(--font-mono);
-  color: var(--faint);
+  /* --faint is under 4.5:1 on the terminal window (axe color-contrast). */
+  color: var(--muted);
 }
 
 .bank {
@@ -150,7 +151,7 @@
 }
 
 .input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 400;
 }
 
