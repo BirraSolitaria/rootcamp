@@ -40,10 +40,7 @@ export function App() {
               path="/check-email"
               element={<RequireUser verified={false}>{() => <CheckEmail />}</RequireUser>}
             />
-            <Route
-              path="/"
-              element={<RequireUser>{(me) => <PathIndex me={me} />}</RequireUser>}
-            />
+            <Route path="/" element={<RequireUser>{(me) => <PathIndex me={me} />}</RequireUser>} />
             <Route
               path="/track/:trackId"
               element={<RequireUser>{(me) => <PathScreen me={me} />}</RequireUser>}

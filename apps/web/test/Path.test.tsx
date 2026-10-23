@@ -30,7 +30,13 @@ const t1: Track = {
   prerequisites: [],
   reviewedAt: '2026-10-01',
   sections: [
-    { id: 't1.s01', title: 'Терминал', description: '', lessonCount: 3, nodes: lessons('t1.s01', 3) },
+    {
+      id: 't1.s01',
+      title: 'Терминал',
+      description: '',
+      lessonCount: 3,
+      nodes: lessons('t1.s01', 3),
+    },
     { id: 't1.s02', title: 'Файлы', description: '', lessonCount: 2, nodes: lessons('t1.s02', 2) },
   ],
 };
