@@ -19,7 +19,7 @@ VPS: 4 vCPU, 7,8 ГБ RAM, KVM, Ubuntu 24.04.5 LTS (штатное ядро `6.8
 >   cd ~/rootcamp && git pull --ff-only && docker compose -p rootcamp --env-file infra/versions.env --env-file infra/vps.env -f infra/compose.yaml -f infra/compose.vps-test.yaml up -d --build
 >   ```
 >
->   Затем активируйте версию курса из нового образа (§8, «Контент курса»): `… exec api node dist/cli.js content:list` и `… content:activate <hash>`.
+>   Сразу после неё активируйте версию курса из нового образа (§8, «Контент курса»): `… exec api node dist/cli.js content:list` и `… content:activate <hash>`. До активации API курса отвечает `503`. Пересобирайте всегда весь стенд, а не один `api` или `caddy`: иначе версии курса в образах разойдутся.
 >
 > - Автообновления безопасности ставит unattended-upgrades, но сервер сам не перезагружается. Если появился файл `/var/run/reboot-required` (в нём и в `/var/run/reboot-required.pkgs` — причина, обычно новое ядро), выполните `sudo reboot`. Стенд поднимется сам: Docker включён в автозапуск, у всех сервисов (`postgres`, `api`, `caddy`, `mailpit`) стоит `restart: unless-stopped` (проверено перезагрузкой).
 >
@@ -278,6 +278,11 @@ rc exec api node dist/cli.js content:list              # версии в обр�
 rc exec api node dist/cli.js content:activate <hash>   # hash — строка из content:list без пометки
 ```
 
+Две вещи, которые легко упустить:
+
+- **`api` и `caddy` пересобираются только вместе** (`rc up -d --build` без имени сервиса). Каждый образ собирает курс сам. После `rc up -d --build api` (или только `caddy`) хеши в образах могут разойтись. Тогда api активирует версию, файлов которой нет в Caddy, и `/content/<hash>/…` отвечает `404`.
+- **Активируйте сразу после `up --build`.** Новый образ `api` содержит только новую версию, а в базе активна старая, которой в образе уже нет (`content:list` пишет `NOT INSTALLED`). До `content:activate` контентные маршруты (`GET /api/content/version`, `GET /api/progress`, старт урока и повторения) отвечают `503`, учиться нельзя. Вход, профиль и health работают.
+
 Узнать hash можно и из лога сборки: шаг `pnpm content:build` печатает `version <hash>`. Неинтерактивно, одной командой (в образе ровно одна версия):
 
 ```bash
@@ -350,7 +355,9 @@ rc exec -T api sh -c 'node dist/cli.js content:activate "$(ls content-dist/serve
 curl -s http://127.0.0.1:8080/api/health; echo
 ```
 
-**Проверка:** `git log --oneline -1` показывает новый коммит, активация печатает `activated <hash>` (повторная активация той же версии безвредна), health печатает `{"db":true,...}`. После изменения только `vps.env` пересборка не нужна, хватит `rc up -d`: изменённые контейнеры пересоздадутся.
+Вторую строку запускайте сразу за первой: между `up --build` и активацией API курса отвечает `503` (§8, «Контент курса»). `up --build` пересобирает `api` и `caddy` вместе, по одному их не пересобирайте.
+
+**Проверка:** `git log --oneline -1` показывает новый коммит, активация печатает `activated <hash>` (повторная активация той же версии безвредна), health печатает `{"db":true,...}`, а `curl -s http://127.0.0.1:8080/api/content/version` печатает `{"version":"<hash>",...}` с тем же hash. После изменения только `vps.env` пересборка не нужна, хватит `rc up -d`: изменённые контейнеры пересоздадутся.
 
 **Перезагрузка сервера** (например, ради нового ядра — когда есть `/var/run/reboot-required`, §1): `sudo reboot`. Docker включён в автозапуск, у всех сервисов `restart: unless-stopped`, так что стенд поднимается сам. Исключение: сервисы, остановленные вручную через `rc stop`, после перезагрузки остаются остановленными.
 
