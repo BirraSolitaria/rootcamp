@@ -84,28 +84,29 @@ export function plan(i: PlanInput): Plan {
     else waiting.push(r);
   }
 
-  const canStart = !i.drained && i.diskFreeGb >= MIN_DISK_FREE_GB;
+  const diskOk = i.diskFreeGb >= MIN_DISK_FREE_GB;
   const stillQueued: QueuedRow[] = [];
 
-  if (canStart) {
-    let mem = 0;
-    let cpu = 0;
-    let heavy = 0;
-    let testActive = false;
-    for (const s of i.active) {
-      if (s.test) {
-        testActive = true;
-        continue;
-      }
-      mem += s.memMb;
-      cpu += s.cpu;
-      if (s.class === 'heavy') heavy++;
+  let mem = 0;
+  let cpu = 0;
+  let heavy = 0;
+  let testActive = false;
+  for (const s of i.active) {
+    if (s.test) {
+      testActive = true;
+      continue;
     }
+    mem += s.memMb;
+    cpu += s.cpu;
+    if (s.class === 'heavy') heavy++;
+  }
 
-    // Test rows: no budget, at most one test sandbox active or admitted at a time.
-    const t = tests[0];
-    if (!testActive && t) admit.push(t.id);
+  // Test rows: no budget, at most one test sandbox active or admitted at a time. Drain does
+  // not apply: §11.5 runs `practice:test --all` while still drained, before `undrain`.
+  const t = tests[0];
+  if (diskOk && !testActive && t) admit.push(t.id);
 
+  if (diskOk && !i.drained) {
     // §6.5 item 2 + 3.
     let blocked = false;
     for (const r of waiting) {
@@ -138,7 +139,11 @@ export function plan(i: PlanInput): Plan {
   return { admit, timeout, positions };
 }
 
-/** §6.5 item 5 + drain mode: may a new request join the queue? */
+/**
+ * §6.5 item 5 + drain mode: may a new user request join the queue? `queuedCount` must count
+ * only non-test `queued` rows. Test enqueues (`practice:test`) are not subject to this check,
+ * neither the length limit nor drain: §11.5 runs them while drained.
+ */
 export function canEnqueue(
   queuedCount: number,
   drained: boolean,

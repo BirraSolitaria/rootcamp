@@ -260,12 +260,26 @@ describe('plan — heavy anti-starvation', () => {
 });
 
 describe('plan — drained', () => {
-  test('drained admits nothing, still times out and reports positions', () => {
+  test('drained admits no user rows but still admits a test row (§11.5 practice:test --all)', () => {
     const r = run({
       drained: true,
       queued: [q('old', 'light', 21 * MIN), q('a', 'light', MIN), q('t', 'light', MIN, true)],
     });
-    expect(r).toEqual({ admit: [], timeout: ['old'], positions: { a: 1 } });
+    expect(r).toEqual({ admit: ['t'], timeout: ['old'], positions: { a: 1 } });
+  });
+
+  test('drained: an active test still blocks the next test row', () => {
+    const r = run({
+      drained: true,
+      active: [a('light', true)],
+      queued: [q('t', 'light', MIN, true)],
+    });
+    expect(r).toEqual({ admit: [], timeout: [], positions: {} });
+  });
+
+  test('drained + low disk: the test row is not admitted either', () => {
+    const r = run({ drained: true, diskFreeGb: 9, queued: [q('t', 'light', MIN, true)] });
+    expect(r).toEqual({ admit: [], timeout: [], positions: {} });
   });
 });
 
