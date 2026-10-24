@@ -38,7 +38,13 @@ process.once('SIGINT', () => void shutdown('SIGINT received'));
 
 try {
   await driver.ensureNetwork();
-  app = await buildApp({ config, driver, db: dbHandle.db, loggerInstance: log });
+  app = await buildApp({
+    config,
+    driver,
+    db: dbHandle.db,
+    housekeeping: true,
+    loggerInstance: log,
+  });
   await app.listen({ port: config.port, host: config.host });
   log.info({ driver: driver.name, network: config.network }, 'sandboxd started');
 } catch (err) {

@@ -19,7 +19,8 @@ export type SandboxRow = typeof sandboxes.$inferSelect;
 
 /** Why a sandbox ended up `stopped` / `failed`: a WS close reason, or a lifecycle outcome. */
 export type StopReason = WsCloseReason | 'queue_timeout';
-export type FailReason = 'setup_failed' | 'start_failed' | 'lost' | 'oom' | 'crashed';
+export type FailReason =
+  'setup_failed' | 'start_failed' | 'start_timeout' | 'lost' | 'oom' | 'crashed';
 
 const MINUTE_MS = 60_000;
 /** §6.2 item 4. */
@@ -116,6 +117,17 @@ interface StartRecord {
   promise: Promise<void>;
   aborted: boolean;
   containerId?: string;
+  /** When this process began bringing the row up (`now()`), for the GC's 5 min limit. */
+  startedAt: number;
+}
+
+export interface FailOptions {
+  /** Source states the row may be in (default `starting` and `ready`). */
+  from?: readonly ('starting' | 'ready')[];
+  /** Only if the row still names this container (a `die` of a stale container is ignored). */
+  containerId?: string;
+  /** Usage of a `ready` row is booked up to this time (default now). */
+  usageAt?: Date;
 }
 
 /**
@@ -441,7 +453,7 @@ export class Lifecycle {
    * history wipe → `ready`. The promise is tracked so `stopSandbox` / `close` can wait for it.
    */
   startSandbox(row: SandboxRow): void {
-    const rec: StartRecord = { promise: Promise.resolve(), aborted: false };
+    const rec: StartRecord = { promise: Promise.resolve(), aborted: false, startedAt: this.now() };
     rec.promise = this.runStart(row, rec)
       .catch((err: unknown) => this.log.error({ err, sandboxId: row.id }, 'sandbox start crashed'))
       .finally(() => this.starts.delete(row.id));
@@ -494,7 +506,12 @@ export class Lifecycle {
         })
         .where(and(eq(sandboxes.id, row.id), eq(sandboxes.state, 'starting')))
         .returning({ id: sandboxes.id });
-      if (ready) this.log.info({ sandboxId: row.id }, 'sandbox ready');
+      if (ready) {
+        this.log.info({ sandboxId: row.id }, 'sandbox ready');
+      } else {
+        // The row moved on meanwhile (stop, GC fail): nobody else will remove this container.
+        await this.removeContainer(row.id, containerId);
+      }
     } catch (err) {
       if (rec.aborted) return;
       this.log.error({ err, sandboxId: row.id }, 'sandbox failed to start');
@@ -553,6 +570,59 @@ export class Lifecycle {
     this.wake();
   }
 
+  /** When this process started bringing `id` up; undefined if no start is in flight. */
+  startedAt(id: string): number | undefined {
+    return this.starts.get(id)?.startedAt;
+  }
+
+  /**
+   * `starting` / `ready` → `failed(reason)` for Task 5: a container that died (`oom`,
+   * `crashed`), a start that took too long (`start_timeout`), a sandbox lost across a restart
+   * (`lost`). Terminals get `closed: sandbox_failed`; an in-flight start is aborted; the
+   * container is removed; a `ready` row's minutes are booked like a stop's. Resolves false when
+   * the row was not in a source state (or names another container).
+   */
+  async failSandbox(
+    id: string,
+    reason: FailReason,
+    output: string | null,
+    o: FailOptions = {},
+  ): Promise<boolean> {
+    const from = o.from ?? (['starting', 'ready'] as const);
+    const [row] = await this.db
+      .update(sandboxes)
+      .set({
+        state: 'failed',
+        stopReason: reason,
+        failureOutput: output === null ? null : clipChars(output, FAILURE_OUTPUT_CHARS),
+      })
+      .where(
+        and(
+          eq(sandboxes.id, id),
+          inArray(sandboxes.state, [...from]),
+          o.containerId ? eq(sandboxes.containerId, o.containerId) : undefined,
+        ),
+      )
+      .returning();
+    if (!row) return false;
+    this.log.warn({ sandboxId: id, reason }, 'sandbox failed');
+    this.emitClosed(id, 'sandbox_failed');
+    // ready_at is set only by the ready transition, so it marks a row that was ready. Booked
+    // once: only the call whose conditional update matched gets here.
+    if (row.readyAt) await recordUsage(this.db, row, o.usageAt ?? new Date(this.now()));
+
+    const start = this.starts.get(id);
+    if (start) {
+      start.aborted = true;
+      if (start.containerId) await this.removeContainer(id, start.containerId);
+      await start.promise;
+    }
+    const containerId = start?.containerId ?? (await this.get(id))?.containerId ?? row.containerId;
+    if (containerId) await this.removeContainer(id, containerId);
+    this.wake();
+    return true;
+  }
+
   /**
    * `queued` / `starting` / `ready` → `stopping` → (`docker stop -t 10`, `rm -v`) → `stopped`,
    * then books the minutes. Emits `closed(reason)` first so terminals close before the
@@ -578,7 +648,17 @@ export class Lifecycle {
       if (start.containerId) await this.removeContainer(id, start.containerId);
       await start.promise;
     }
-    const containerId = (await this.get(id))?.containerId ?? start?.containerId;
+    await this.completeStop(id, start?.containerId);
+    return true;
+  }
+
+  /**
+   * The second half of a stop: removes the container of a `stopping` row, moves it to
+   * `stopped` and books the minutes. Also used by reconcile for a stop a previous process
+   * left unfinished. Resolves false when the row was not `stopping`.
+   */
+  async completeStop(id: string, knownContainerId?: string): Promise<boolean> {
+    const containerId = (await this.get(id))?.containerId ?? knownContainerId;
     if (containerId) await this.removeContainer(id, containerId);
 
     const stoppedAt = new Date(this.now());
@@ -589,7 +669,7 @@ export class Lifecycle {
       .returning();
     if (stopped) await recordUsage(this.db, stopped, stoppedAt);
     this.wake();
-    return true;
+    return stopped !== undefined;
   }
 
   /** A failed removal is logged; Task 5's GC removes containers whose row is stopped/failed. */

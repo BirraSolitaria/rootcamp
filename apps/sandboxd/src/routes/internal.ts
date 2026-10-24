@@ -5,6 +5,7 @@ import {
   ExecChecksBody,
   type ErrorCode,
   type ExtendSandboxResponse,
+  type MetricsDto,
 } from '@rootcamp/api-contract';
 import type { FastifyError, FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -12,6 +13,8 @@ import { LifecycleError, type Lifecycle } from '../lifecycle.js';
 
 export interface InternalRoutesOptions {
   lifecycle: Lifecycle;
+  /** `GET /internal/metrics`. */
+  metrics: { snapshot(): MetricsDto };
   /** `INTERNAL_TOKEN`: every route here requires `Authorization: Bearer <token>`. */
   token: string;
 }
@@ -78,6 +81,8 @@ export async function internalRoutes(
   });
 
   app.get('/internal/health', async () => ({ ok: true }));
+
+  app.get('/internal/metrics', async (): Promise<MetricsDto> => o.metrics.snapshot());
 
   app.post('/internal/sandboxes', async (req, reply) => {
     const body = parse(CreateSandboxBody, req.body);

@@ -4,15 +4,20 @@ import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
 import { promisify } from 'node:util';
 import type Docker from 'dockerode';
+import { usageFromDockerStats } from '../metrics.js';
 import {
   SANDBOX_LABEL,
   USER_LABEL,
+  type ContainerEvent,
   type ContainerSpec,
+  type ContainerState,
+  type ContainerStats,
   type ExecOptions,
   type ExecResult,
   type ManagedContainer,
   type SandboxDriver,
   type TtyHandle,
+  type WatchEventsOptions,
 } from './types.js';
 
 const execFileP = promisify(execFile);
@@ -27,6 +32,37 @@ const KILL_AFTER_SEC = 2;
 const STREAM_GRACE_MS = 3000;
 const STOP_TIMEOUT_SEC = 10;
 const MIB = 1024 * 1024;
+
+/**
+ * `docker image prune -f --filter label!=rootcamp.keep` (spec §6.6): dangling (untagged) images
+ * only, as the CLI without `-a`; `:prev` images carry `rootcamp.keep` (§6.8).
+ */
+export const IMAGE_PRUNE_FILTERS = { dangling: ['true'], 'label!': ['rootcamp.keep'] };
+/** From this API version on, volume prune without `all` spares named volumes. */
+const VOLUME_PRUNE_MIN_API = [1, 42] as const;
+
+/** A `die` / `oom` of a container with the sandbox label, else null. */
+export function parseDockerEvent(raw: unknown): ContainerEvent | null {
+  const e = raw as {
+    Type?: string;
+    Action?: string;
+    Actor?: { ID?: string; Attributes?: Record<string, string> };
+    time?: number;
+    timeNano?: number;
+  } | null;
+  if (!e || e.Type !== 'container' || (e.Action !== 'die' && e.Action !== 'oom')) return null;
+  const sandboxId = e.Actor?.Attributes?.[SANDBOX_LABEL];
+  const containerId = e.Actor?.ID;
+  if (!sandboxId || !containerId) return null;
+  const code = Number.parseInt(e.Actor?.Attributes?.exitCode ?? '', 10);
+  return {
+    action: e.Action,
+    containerId,
+    sandboxId,
+    exitCode: Number.isNaN(code) ? null : code,
+    timeMs: e.timeNano ? Math.floor(e.timeNano / 1e6) : (e.time ?? 0) * 1000,
+  };
+}
 
 export const containerName = (sandboxId: string) => `rc-sbx-${sandboxId.slice(0, 8)}`;
 
@@ -345,5 +381,77 @@ done; exit 0`;
       sandboxId: c.Labels[SANDBOX_LABEL] ?? '',
       running: c.State === 'running',
     }));
+  }
+
+  async watchEvents(o: WatchEventsOptions): Promise<() => void> {
+    const stream = (await this.docker.getEvents({
+      ...(o.sinceMs === undefined ? {} : { since: Math.floor(o.sinceMs / 1000) }),
+      filters: { type: ['container'], event: ['die', 'oom'], label: [SANDBOX_LABEL] },
+    })) as NodeJS.ReadableStream & { destroy?: () => void };
+    let pending = '';
+    let done = false;
+    const end = (err?: unknown) => {
+      if (done) return;
+      done = true;
+      o.onEnd(err);
+    };
+    // Newline-delimited JSON, one event per line.
+    stream.on('data', (chunk: Buffer) => {
+      pending += chunk.toString('utf8');
+      let nl: number;
+      while ((nl = pending.indexOf('\n')) >= 0) {
+        const line = pending.slice(0, nl).trim();
+        pending = pending.slice(nl + 1);
+        if (!line) continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const e = parseDockerEvent(parsed);
+        if (e) o.onEvent(e);
+      }
+    });
+    stream.on('end', () => end());
+    stream.on('close', () => end());
+    stream.on('error', (err: unknown) => end(err));
+    return () => {
+      done = true;
+      stream.destroy?.();
+    };
+  }
+
+  async containerState(id: string): Promise<ContainerState | null> {
+    try {
+      const info = await this.docker.getContainer(id).inspect();
+      return {
+        running: info.State.Running,
+        oomKilled: info.State.OOMKilled,
+        exitCode: info.State.ExitCode,
+      };
+    } catch (err) {
+      if (statusOf(err) === 404) return null;
+      throw err;
+    }
+  }
+
+  async stats(id: string): Promise<ContainerStats> {
+    return usageFromDockerStats(await this.docker.getContainer(id).stats({ stream: false }));
+  }
+
+  async pruneImages(): Promise<void> {
+    await this.docker.pruneImages({ filters: IMAGE_PRUNE_FILTERS });
+  }
+
+  async pruneVolumes(): Promise<void> {
+    const { ApiVersion } = await this.docker.version();
+    const [major = 0, minor = 0] = String(ApiVersion).split('.').map(Number);
+    const [wantMajor, wantMinor] = VOLUME_PRUNE_MIN_API;
+    if (major < wantMajor || (major === wantMajor && minor < wantMinor)) {
+      // Older daemons prune named volumes too (the database's among them).
+      throw new Error(`volume prune skipped: Docker API ${ApiVersion} < 1.42`);
+    }
+    await this.docker.pruneVolumes({});
   }
 }

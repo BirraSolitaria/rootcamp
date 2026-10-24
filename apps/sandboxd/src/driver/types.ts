@@ -89,4 +89,48 @@ export interface SandboxDriver {
   diskUsageMb(id: string): Promise<number>;
   /** Every container with the `rootcamp.sandbox` label, running or not. */
   listManaged(): Promise<ManagedContainer[]>;
+  /** Streams `die` / `oom` of labelled containers; resolves with a function that stops it. */
+  watchEvents(o: WatchEventsOptions): Promise<() => void>;
+  /** State of a container; null when it no longer exists. */
+  containerState(id: string): Promise<ContainerState | null>;
+  /** One `docker stats --no-stream` sample. */
+  stats(id: string): Promise<ContainerStats>;
+  /** `docker image prune -f --filter label!=rootcamp.keep` (dangling images only). */
+  pruneImages(): Promise<void>;
+  /** `docker volume prune -f`: unused anonymous volumes only (API ≥ 1.42). */
+  pruneVolumes(): Promise<void>;
+}
+
+/** A `die` / `oom` event of a labelled container (`docker events`). */
+export interface ContainerEvent {
+  action: 'die' | 'oom';
+  containerId: string;
+  sandboxId: string;
+  /** `exitCode` attribute of `die` (and of `oom`, if dockerd sends one); null if absent. */
+  exitCode: number | null;
+  timeMs: number;
+}
+
+export interface WatchEventsOptions {
+  /** Replays events from this time (dockerd keeps a short log); default: only new events. */
+  sinceMs?: number;
+  onEvent(e: ContainerEvent): void;
+  /** The stream ended or broke (dockerd restart); the watcher reconnects. */
+  onEnd(err?: unknown): void;
+}
+
+export interface ContainerState {
+  running: boolean;
+  /** The kernel OOM killer hit the container's main process. */
+  oomKilled: boolean;
+  exitCode: number;
+}
+
+/** Live CPU / RAM of a container (`docker stats --no-stream`); same shape as SandboxUsageDto. */
+export interface ContainerStats {
+  /** Percent of one CPU, like `docker stats`. */
+  cpuPct: number;
+  /** Usage without the reclaimable page cache, MiB. */
+  memMb: number;
+  memLimitMb: number;
 }

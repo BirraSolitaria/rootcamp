@@ -90,3 +90,40 @@ export type ExtendSandboxResponse = z.infer<typeof ExtendSandboxResponse>;
 /** `DELETE /internal/sandboxes/:id`; the reason goes to open terminals as `{t:'closed'}`. */
 export const DeleteSandboxBody = z.object({ reason: WsCloseReason });
 export type DeleteSandboxBody = z.infer<typeof DeleteSandboxBody>;
+
+/** Host gauges of `GET /internal/metrics` (spec §11.4): `HOST_PROC` stat/meminfo, statfs. */
+export const HostMetricsDto = z.object({
+  /** Busy share of all host CPUs since the previous poll, 0–100. */
+  cpuPct: z.number().nonnegative(),
+  memUsedMb: z.number().nonnegative(),
+  memTotalMb: z.number().nonnegative(),
+  diskUsedGb: z.number().nonnegative(),
+  diskTotalGb: z.number().nonnegative(),
+});
+export type HostMetricsDto = z.infer<typeof HostMetricsDto>;
+
+/** One `ready` sandbox (`docker stats --no-stream`); `diskMb` is the GC's latest measurement. */
+export const SandboxMetricsDto = z.object({
+  sandboxId: z.uuid(),
+  /** Like `docker stats`: percent of one CPU (a 2-CPU sandbox can reach 200). */
+  cpuPct: z.number().nonnegative(),
+  memMb: z.number().nonnegative(),
+  memLimitMb: z.number().nonnegative(),
+  /** null until the GC has measured it (once a minute). */
+  diskMb: z.number().nonnegative().nullable(),
+});
+export type SandboxMetricsDto = z.infer<typeof SandboxMetricsDto>;
+
+export const HostMetricsPointDto = HostMetricsDto.extend({ at: z.iso.datetime() });
+export type HostMetricsPointDto = z.infer<typeof HostMetricsPointDto>;
+
+/** `GET /internal/metrics`: the latest poll (every 10 s) and the last 60 host points. */
+export const MetricsDto = z.object({
+  /** Time of the latest poll; null before the first one (then everything is zero / empty). */
+  at: z.iso.datetime().nullable(),
+  host: HostMetricsDto,
+  sandboxes: z.array(SandboxMetricsDto),
+  /** Oldest first, at most 60. */
+  history: z.array(HostMetricsPointDto),
+});
+export type MetricsDto = z.infer<typeof MetricsDto>;
