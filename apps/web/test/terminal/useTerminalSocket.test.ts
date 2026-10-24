@@ -322,6 +322,56 @@ describe('useTerminalSocket', () => {
     expect(result.current.state).toBe('open');
   });
 
+  it('the browser going offline drops the open socket at once and retries with backoff', async () => {
+    const { result } = await connected();
+    const ws = last();
+    await act(async () => {
+      window.dispatchEvent(new Event('offline'));
+    });
+    expect(ws.closedWith).toBe(1000);
+    expect(result.current.state).toBe('reconnecting');
+    await advance(1_000);
+    expect(count()).toBe(2);
+    await serverReady();
+    expect(result.current.state).toBe('open');
+  });
+
+  it('coming back online retries at once instead of waiting out the backoff', async () => {
+    const { result } = await connected();
+    await act(async () => last().drop(1006));
+    for (const ms of [1_000, 2_000, 4_000]) {
+      await advance(ms);
+      await failPending();
+    }
+    expect(count()).toBe(4);
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await advance(0);
+    expect(count()).toBe(5);
+    await serverReady();
+    expect(result.current.state).toBe('open');
+  });
+
+  it('online/offline events change nothing when they do not apply', async () => {
+    const { result } = await connected();
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    expect(count()).toBe(1);
+    expect(result.current.state).toBe('open');
+    await act(async () => last().ctl({ t: 'closed', reason: 'expired' }));
+    await act(async () => last().drop(4000));
+    expect(result.current.state).toBe('closed');
+    await act(async () => {
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+    });
+    await advance(30_000);
+    expect(count()).toBe(1);
+    expect(result.current.state).toBe('closed');
+  });
+
   it('closes the socket and stops retrying on unmount', async () => {
     const { unmount } = await connected();
     const ws = last();

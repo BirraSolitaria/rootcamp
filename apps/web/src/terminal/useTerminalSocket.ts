@@ -214,6 +214,26 @@ export function useTerminalSocket(opts: TerminalSocketOptions): TerminalSocket {
     return teardown;
   }, [teardown]);
 
+  // The browser knows about a network loss long before a missing pong (45 s) would: `offline`
+  // drops a live or connecting socket at once (→ «Переподключаемся…», backoff retries);
+  // `online` during the backoff tries again right away. Final states are left alone.
+  useEffect(() => {
+    const onOffline = () => {
+      if (stateRef.current === 'open' || stateRef.current === 'connecting') fail();
+    };
+    const onOnline = () => {
+      if (stateRef.current !== 'reconnecting') return;
+      failures.current = 0;
+      connectRef.current();
+    };
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
+    return () => {
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [fail]);
+
   const reconnect = useCallback(() => {
     failures.current = 0;
     outageStart.current = null;
