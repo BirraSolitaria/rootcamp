@@ -120,6 +120,9 @@ importers:
       dockerode:
         specifier: 4.0.12
         version: 4.0.12
+      drizzle-orm:
+        specifier: 0.45.4
+        version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)(postgres@3.4.9)
       fastify:
         specifier: 5.12.7
         version: 5.12.7
@@ -130,12 +133,18 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: 12.2.1
+        version: 12.2.1
       '@types/dockerode':
         specifier: 4.0.1
         version: 4.0.1
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      testcontainers:
+        specifier: 12.2.1
+        version: 12.2.1
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -1500,9 +1509,6 @@ packages:
 
   '@types/dockerode@4.0.1':
     resolution: {integrity: sha512-cmUpB+dPN955PxBEuXE3f6lKO1hHiIGYJA46IVF3BJpNsZGvtBDcRnlrHYHtOH/B6vtDOyl2kZ2ShAu3mgc27Q==}
-
-  '@types/dockerode@4.0.2':
-    resolution: {integrity: sha512-hA4myZ0XzwHG/p/eCLElYsQS3y1XZfvi6AfLFKVp1SNpPkO6J3xLatacAFVkReTxXRoIa3eHJmhJi9w6I3+zNA==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -4301,12 +4307,6 @@ snapshots:
       '@types/node': 22.20.5
       '@types/ssh2': 1.15.6
 
-  '@types/dockerode@4.0.2':
-    dependencies:
-      '@types/docker-modem': 3.0.6
-      '@types/node': 22.20.5
-      '@types/ssh2': 1.15.6
-
   '@types/estree@1.0.9': {}
 
   '@types/json-schema@7.0.15': {}
@@ -6068,7 +6068,7 @@ snapshots:
   testcontainers@12.2.1:
     dependencies:
       '@balena/dockerignore': 1.0.2
-      '@types/dockerode': 4.0.2
+      '@types/dockerode': 4.0.1
       archiver: 7.0.1
       async-lock: 1.4.1
       byline: 5.0.0
