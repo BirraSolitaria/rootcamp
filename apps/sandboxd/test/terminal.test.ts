@@ -268,13 +268,23 @@ describe('terminal protocol (fake lifecycle and TTY)', () => {
   const events = new EventEmitter();
   const rows = new Map<string, Partial<SandboxRow>>();
   const touches: string[] = [];
+  /** Runs inside `get()` before it answers (with the snapshot taken before the hook ran). */
+  let onGet: ((id: string) => void) | undefined;
+  /** When set, `execTty` waits for it. */
+  let ttyGate: Promise<void> | undefined;
+  let ttyCalls = 0;
   const ttys: FakeTty[] = [];
   const registry = new TerminalRegistry();
   let app: FastifyInstance;
   let base = '';
 
   const lifecycle = {
-    get: async (id: string) => rows.get(id) as SandboxRow | undefined,
+    get: async (id: string) => {
+      const r = rows.get(id);
+      const snapshot = r ? { ...r } : undefined;
+      onGet?.(id);
+      return snapshot as SandboxRow | undefined;
+    },
     touch: async (id: string) => {
       touches.push(id);
     },
@@ -318,6 +328,8 @@ describe('terminal protocol (fake lifecycle and TTY)', () => {
       lifecycle,
       driver: {
         execTty: async () => {
+          ttyCalls++;
+          if (ttyGate) await ttyGate;
           const t = new FakeTty();
           ttys.push(t);
           return t;
@@ -512,6 +524,43 @@ describe('terminal protocol (fake lifecycle and TTY)', () => {
     expect(tty.resumes).toBe(0);
     await waitFor('resumed', async () => tty.resumes === 1, 2_000);
     await waitFor('all bytes', async () => c.bytes() === 300 * 1024);
+    c.ws.close();
+    await c.closed;
+  });
+
+  test('a stop racing the first read (closed missed) → 4401, never ready', async () => {
+    const p = sandbox();
+    const calls = ttyCalls;
+    // The stop commits `stopping` and emits `closed` while the first get() is in flight:
+    // the connection is not registered yet, so the event cannot reach it.
+    onGet = (id) => {
+      onGet = undefined;
+      rows.get(id)!.state = 'stopping';
+      events.emit('closed', id, 'stopped_by_user');
+    };
+    const c = open(p);
+    expect((await c.closed).code).toBe(4401);
+    expect(c.ctl).toEqual([]);
+    expect(ttyCalls).toBe(calls);
+    expect(registry.count(p.sandboxId)).toBe(0);
+  });
+
+  test('extended while the exec starts wins over the deadline read before', async () => {
+    // 2 min left would send {t:'expiring', secondsLeft:120} at ready.
+    const p = sandbox({ expiresAt: new Date(Date.now() + 120_000) });
+    let open_!: () => void;
+    ttyGate = new Promise<void>((r) => (open_ = r));
+    const c = open(p);
+    await waitFor('execTty called', async () => registry.count(p.sandboxId) === 1);
+    await sleep(100);
+    const at = new Date(Date.now() + 15 * 60_000);
+    events.emit('extended', p.sandboxId, at);
+    ttyGate = undefined;
+    open_();
+    await c.waitCtl('ready');
+    expect(await c.waitCtl('extended')).toEqual({ t: 'extended', expiresAt: at.toISOString() });
+    await sleep(200);
+    expect(c.ctl.map((x) => x.t)).toEqual(['ready', 'extended']);
     c.ws.close();
     await c.closed;
   });

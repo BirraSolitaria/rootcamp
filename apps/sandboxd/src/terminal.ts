@@ -436,7 +436,8 @@ export async function terminalRoutes(app: FastifyInstance, opts: TerminalOptions
       armSilence();
 
       const refuse = (why: string) => {
-        log.info({ why }, 'terminal refused');
+        // warn: the route's logLevel hides info; never log the ticket or the URL.
+        log.warn({ why }, 'terminal refused');
         finish(WS_CLOSE_UNAUTHORIZED, 'unauthorized');
       };
 
@@ -467,6 +468,11 @@ export async function terminalRoutes(app: FastifyInstance, opts: TerminalOptions
           refuse(why);
           return;
         }
+        // The deadline to arm at `ready`: an `extended` arriving while the exec starts wins
+        // over the row read here.
+        let expiresAt = row!.expiresAt;
+        let readySent = false;
+        let pendingExtended: Date | undefined;
         conn = {
           sandboxId: ticket.sandboxId,
           closeWith: (reason) => {
@@ -477,16 +483,40 @@ export async function terminalRoutes(app: FastifyInstance, opts: TerminalOptions
           },
           extended: (at) => {
             if (ended) return;
+            expiresAt = at;
+            if (!readySent) {
+              pendingExtended = at;
+              return;
+            }
             send(ws, { t: 'extended', expiresAt: at.toISOString() });
             armExpiring(at);
           },
         };
         if (!registry.tryAdd(conn)) {
           conn = undefined;
-          log.info({ sandboxId: ticket.sandboxId }, 'terminal refused: too many connections');
+          log.warn({ sandboxId: ticket.sandboxId }, 'terminal refused: too many connections');
           finish(WS_CLOSE_TOO_MANY, 'too many connections');
           return;
         }
+
+        // Re-check now that `closed` events reach this connection. A stop commits `stopping`
+        // before it emits `closed`, so a stop racing the first read is either caught by the
+        // registered connection (closeWith) or visible in this read.
+        let again: SandboxRow | undefined;
+        try {
+          again = await opts.lifecycle.get(ticket.sandboxId);
+        } catch (err) {
+          log.error({ err }, 'terminal: sandbox lookup failed');
+          finish(1011, 'internal');
+          return;
+        }
+        if (ended) return;
+        const whyNow = ticketRefusal(ticket, again);
+        if (whyNow || again!.containerId !== row!.containerId) {
+          refuse(whyNow ?? 'sandbox container changed');
+          return;
+        }
+        if (!pendingExtended) expiresAt = again!.expiresAt;
 
         let handle_: TtyHandle;
         try {
@@ -509,7 +539,9 @@ export async function terminalRoutes(app: FastifyInstance, opts: TerminalOptions
           }
         });
         send(ws, { t: 'ready' });
-        armExpiring(row!.expiresAt);
+        readySent = true;
+        if (pendingExtended) send(ws, { t: 'extended', expiresAt: pendingExtended.toISOString() });
+        armExpiring(expiresAt);
         tty.onData((chunk) => {
           if (ended) return;
           out.push(chunk);
