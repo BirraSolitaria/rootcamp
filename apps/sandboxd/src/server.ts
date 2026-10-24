@@ -47,6 +47,9 @@ try {
   });
   await app.listen({ port: config.port, host: config.host });
   log.info({ driver: driver.name, network: config.network }, 'sandboxd started');
+  if (driver.name === 'runc-dev') {
+    log.warn('driver=runc-dev (DEV ONLY: runc-dev driver — no systemd, no userns isolation)');
+  }
 } catch (err) {
   log.error({ err }, 'sandboxd failed to start');
   await shutdown('startup failure', 1);
