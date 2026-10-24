@@ -183,6 +183,42 @@ describe('Terminal', () => {
     expect(term().resize).toHaveBeenLastCalledWith(40, 20);
   });
 
+  describe('JetBrains Mono still loading at open()', () => {
+    let resolveFont: () => void;
+    let load: Mock;
+    beforeEach(() => {
+      load = vi.fn(() => new Promise<void>((r) => (resolveFont = r)));
+      Object.defineProperty(document, 'fonts', { configurable: true, value: { load } });
+    });
+    afterEach(() => {
+      delete (document as { fonts?: unknown }).fonts;
+    });
+
+    it('switches to an equivalent family once the face loads, so xterm re-measures, and refits', async () => {
+      render(<Terminal runId="r1" compact={false} getTicket={() => new Promise(() => {})} />);
+      expect(load).toHaveBeenCalledWith('14px "JetBrains Mono"');
+      expect(term().options.fontFamily).toBe('JetBrains Mono');
+      // The real cell is narrower than the fallback font's: more columns fit.
+      xterm.proposed = { cols: 96, rows: 34 };
+      expect(term().resize).not.toHaveBeenCalledWith(96, 34);
+      await act(async () => resolveFont());
+      expect(term().options.fontFamily).toBe("'JetBrains Mono', monospace");
+      expect(term().resize).toHaveBeenLastCalledWith(96, 34);
+    });
+
+    it('does nothing once unmounted', async () => {
+      const { unmount } = render(
+        <Terminal runId="r1" compact={false} getTicket={() => new Promise(() => {})} />,
+      );
+      const t = term();
+      unmount();
+      xterm.proposed = { cols: 96, rows: 34 };
+      await act(async () => resolveFont());
+      expect(t.options.fontFamily).toBe('JetBrains Mono');
+      expect(t.resize).not.toHaveBeenCalledWith(96, 34);
+    });
+  });
+
   it('shows «Соединение потеряно» after 2 min and reconnects on «Подключиться»', async () => {
     vi.useFakeTimers();
     const getTicket = vi.fn(() => Promise.reject(new Error('down')));
