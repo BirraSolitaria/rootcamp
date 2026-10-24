@@ -2,7 +2,6 @@ import type { PracticeStatus, ProgressDto } from '@rootcamp/api-contract';
 import { lessonCompletions, reviewItems, users, type Db } from '@rootcamp/db';
 import {
   dueTaskIdsInCourse,
-  practiceAvailability,
   toDateKey,
   trackLessonIds,
   type LeitnerItem,
@@ -12,6 +11,7 @@ import { and, eq, lte } from 'drizzle-orm';
 import { HttpError } from '../plugins/errors.js';
 import type { ContentStore } from './contentStore.js';
 import type { Executor } from './executor.js';
+import { practiceStatusesOf, solvedPracticeIds } from './practices.js';
 
 /**
  * Lessons the user has completed that exist in `store`: completions of removed lessons stay
@@ -32,7 +32,7 @@ export async function completedLessonIds(
 /**
  * `GET /api/progress` (spec §5.1) against the active content. `dueCount` counts review items
  * due by today in the user's zone whose tasks exist and are not `terminal_practice`.
- * `practiceStatuses` is `locked`/`available` from the path; `solved` arrives with M4a.
+ * `practiceStatuses`: `locked`/`available` from the path, `solved` once solved (practices.ts).
  */
 export async function getProgress(
   db: Db,
@@ -56,9 +56,12 @@ export async function getProgress(
     items[r.taskId] = { taskId: r.taskId, box: r.box as LeitnerItem['box'], dueDate: r.dueDate };
   }
 
-  const practiceStatuses: Record<string, PracticeStatus> = {};
+  const practiceStatuses: Record<string, PracticeStatus> = practiceStatusesOf(
+    store.catalog.tracks,
+    done,
+    await solvedPracticeIds(db, userId),
+  );
   const tracks = store.catalog.tracks.map((track) => {
-    Object.assign(practiceStatuses, practiceAvailability(track, done));
     const lessonIds = trackLessonIds(track);
     const completedLessons = lessonIds.filter((id) => done.has(id)).length;
     return {

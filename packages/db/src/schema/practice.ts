@@ -72,6 +72,11 @@ export const practiceRuns = pgTable('practice_runs', {
   status: text('status', { enum: PRACTICE_RUN_STATUSES }).notNull().default('queued'),
   /** Resets used (≤ 3 per run, spec §5.1); an addition to §4.4. */
   resets: integer('resets').notNull().default(0),
+  /**
+   * The run's current sandbox (`sandboxes.id`, no foreign key: sandboxd owns that table); a reset
+   * replaces it. Null until `sandboxd` accepted the create. An addition to §4.4 (0005).
+   */
+  sandboxId: uuid('sandbox_id'),
   createdAt: tstz('created_at').notNull().defaultNow(),
   endedAt: tstz('ended_at'),
 });

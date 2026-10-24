@@ -17,9 +17,11 @@ import { healthRoutes } from './routes/health.js';
 import { lessonRoutes } from './routes/lessons.js';
 import { reviewRoutes } from './routes/review.js';
 import { meRoutes } from './routes/me.js';
+import { practiceRoutes } from './routes/practices.js';
 import { progressRoutes } from './routes/progress.js';
 import { NO_CONTENT, type ContentHolder } from './services/contentStore.js';
 import { createLimiters } from './services/limiter.js';
+import { createRunService } from './services/runs.js';
 import type { Limits, Mailer, PgBoss, SandboxdClient } from './types.js';
 
 export interface AppDeps {
@@ -36,7 +38,8 @@ export interface AppDeps {
   logger?: FastifyServerOptions['logger'];
   /** A ready logger instance (server.ts shares its pino logger with pg-boss); wins over `logger`. */
   loggerInstance?: FastifyBaseLogger;
-  sandboxd?: SandboxdClient /* M4a */;
+  /** sandboxd internal API; unset (no `SANDBOXD_URL`) → run routes answer 503, health says false. */
+  sandboxd?: SandboxdClient;
   /**
    * Active course content (`services/contentStore.ts`); the caller owns its lifecycle
    * (`close()`). Omitted: content routes answer 503 and `GET /api/me` counts no tracks.
@@ -72,7 +75,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(rateLimit, { limiters, now: deps.now });
   await app.register(verifiedGuard);
 
-  await app.register(healthRoutes, { db: deps.db });
+  await app.register(healthRoutes, { db: deps.db, sandboxd: deps.sandboxd });
   await app.register(authRoutes, { ...deps, limiters });
   const content = deps.content ?? NO_CONTENT;
   await app.register(meRoutes, { ...deps, content, limiters });
@@ -80,6 +83,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(progressRoutes, { db: deps.db, now: deps.now, content });
   await app.register(lessonRoutes, { db: deps.db, now: deps.now, content });
   await app.register(reviewRoutes, { db: deps.db, now: deps.now, content });
+  const runs = createRunService({
+    db: deps.db,
+    content,
+    sandboxd: deps.sandboxd,
+    boss: deps.boss,
+    now: deps.now,
+    ticketSecret: deps.config.TICKET_SECRET,
+    publicOrigin: deps.config.PUBLIC_ORIGIN,
+    limiters,
+    log: app.log,
+  });
+  await app.register(practiceRoutes, { db: deps.db, content, runs });
 
   return app;
 }

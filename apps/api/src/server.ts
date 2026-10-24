@@ -8,9 +8,13 @@ import { buildApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { startBoss } from './jobs/boss.js';
 import { startEmailSweeper, startEmailWorker } from './jobs/email.js';
+import { startRunsSync } from './jobs/runsSync.js';
+import { startStopSolvedWorker } from './jobs/stopSolved.js';
 import { NO_CONTENT, startContentHolder, type ContentHolder } from './services/contentStore.js';
 import { limitsFromConfig } from './services/limiter.js';
 import { createSmtpMailer } from './services/mailer.js';
+import { createRunSync } from './services/runs.js';
+import { createHttpSandboxdClient } from './services/sandboxdClient.js';
 
 /** Shipped next to dist/ (package.json `files`), so this resolves both from src/ and dist/. */
 const MIGRATIONS_DIR = fileURLToPath(new URL('../drizzle', import.meta.url));
@@ -30,6 +34,11 @@ try {
 const handle = createDb(config.DATABASE_URL, { max: 10 });
 
 const mailer = createSmtpMailer(config);
+
+// Unset until a stand runs sandboxd (R-M4a-3): practice runs answer 503, health says sandboxd:false.
+const sandboxd = config.SANDBOXD_URL
+  ? createHttpSandboxdClient(config.SANDBOXD_URL, config.INTERNAL_TOKEN)
+  : undefined;
 
 // One pino logger for Fastify and pg-boss (pg-boss starts before the app exists).
 const log = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug' });
@@ -89,10 +98,18 @@ try {
     limits: limitsFromConfig(config),
     loggerInstance: log,
     content: content ?? NO_CONTENT,
+    sandboxd,
   });
   const emailDeps = { db: handle.db, mailer, queue: boss, now: Date.now, log };
   await startEmailWorker(boss, emailDeps);
   stopSweeper = startEmailSweeper(emailDeps);
+  if (sandboxd) {
+    const runSync = createRunSync({ db: handle.db, sandboxd, now: Date.now, log });
+    await startRunsSync(boss, runSync);
+    await startStopSolvedWorker(boss, runSync);
+  } else {
+    log.warn('SANDBOXD_URL is not set: practice runs are unavailable');
+  }
   await app.listen({ port: config.PORT, host: config.HOST });
   // Uses @rootcamp/logic at runtime so the built image exercises workspace-package resolution.
   app.log.info(`api listening on ${config.HOST}:${config.PORT} (logic: MAX_HEARTS=${MAX_HEARTS})`);

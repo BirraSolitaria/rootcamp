@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import PgBoss from 'pg-boss';
 import type { Config } from '../config.js';
 import { EMAIL_QUEUE } from '../services/mailer.js';
+import { RUNS_SYNC_QUEUE, STOP_SOLVED_QUEUE } from '../services/runs.js';
 
 /** pg-boss keeps its tables in this schema of the app database. */
 export const BOSS_SCHEMA = 'pgboss';
@@ -25,5 +26,12 @@ export async function startBoss(
   boss.on('error', (err) => log.error({ err }, 'pg-boss error'));
   await boss.start();
   await boss.createQueue(EMAIL_QUEUE, { name: EMAIL_QUEUE, retryLimit: 0 });
+  // Practice jobs (M4a): runs-sync is cron-driven, stop-solved retries a failed DELETE.
+  await boss.createQueue(RUNS_SYNC_QUEUE, { name: RUNS_SYNC_QUEUE, retryLimit: 0 });
+  await boss.createQueue(STOP_SOLVED_QUEUE, {
+    name: STOP_SOLVED_QUEUE,
+    retryLimit: 3,
+    retryDelay: 30,
+  });
   return boss;
 }

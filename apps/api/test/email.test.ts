@@ -271,14 +271,18 @@ describe('inline delivery (no queue)', () => {
     const mailer = flakyMailer(0);
     await enqueueEmail(null, h().db, letter, { mailer, now: h().clock.now });
     const res = await h().app.inject({ method: 'GET', url: '/api/health' });
-    expect(res.json()).toEqual({ db: true, smtpLastOkAt: new Date(h().clock.now()).toISOString() });
+    expect(res.json()).toEqual({
+      db: true,
+      sandboxd: false,
+      smtpLastOkAt: new Date(h().clock.now()).toISOString(),
+    });
   });
 });
 
 describe('GET /api/health smtpLastOkAt', () => {
   it('is null until a letter goes out, then the time of the last successful send', async () => {
     const before = await h().app.inject({ method: 'GET', url: '/api/health' });
-    expect(before.json()).toEqual({ db: true, smtpLastOkAt: null });
+    expect(before.json()).toEqual({ db: true, sandboxd: false, smtpLastOkAt: null });
 
     const queue = recordingQueue();
     const deps = workerDeps(flakyMailer(0), queue);
@@ -290,6 +294,7 @@ describe('GET /api/health smtpLastOkAt', () => {
     expect(after.statusCode).toBe(200);
     expect(after.json()).toEqual({
       db: true,
+      sandboxd: false,
       smtpLastOkAt: new Date(h().clock.now()).toISOString(),
     });
   });

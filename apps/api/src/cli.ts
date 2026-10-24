@@ -2,6 +2,7 @@
 //   docker compose exec api node dist/cli.js admin:grant ann@mail.ru
 //   docker compose exec api node dist/cli.js content:list
 //   docker compose exec api node dist/cli.js content:activate <hash>
+//   docker compose exec api node dist/cli.js sandboxes:drain    (before maintenance, spec §11.5)
 // Needs DATABASE_URL and, for content:*, CONTENT_DIR (the api container has both).
 import { randomBytes } from 'node:crypto';
 import { cp, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
@@ -157,6 +158,29 @@ async function contentInstall(src: string, dir: string): Promise<string[]> {
   return lines;
 }
 
+/** `settings` key read by sandboxd's scheduler on every tick and every user enqueue. */
+export const SANDBOXES_DRAINED_KEY = 'sandboxes_drained';
+
+/**
+ * Writes `settings.sandboxes_drained` and an `audit_log` row (`sandboxes.drain`/`.undrain`,
+ * actor null) in one transaction. Drained: sandboxd admits nothing new and refuses user creates
+ * with `queue_full`; running sandboxes live out their time.
+ */
+async function sandboxesDrain(db: Db, drained: boolean): Promise<string> {
+  await db.transaction(async (tx) => {
+    await setSetting(tx, SANDBOXES_DRAINED_KEY, drained);
+    await tx.insert(auditLog).values({
+      actorId: null,
+      action: drained ? 'sandboxes.drain' : 'sandboxes.undrain',
+      targetId: null,
+      data: { via: 'cli' },
+    });
+  });
+  return drained
+    ? 'sandboxes drained: no new sandboxes start, running ones live out their time'
+    : 'sandboxes undrained: new sandboxes start again';
+}
+
 function buildProgram(deps: CliDeps): Command {
   const program = new Command('rootcamp-cli')
     .description('rootcamp operator commands')
@@ -191,6 +215,18 @@ function buildProgram(deps: CliDeps): Command {
     .argument('<hash>', 'content version, as printed by content-build or content:list')
     .action(async (hash: string) => {
       deps.out(await contentActivate(deps.db, requireContentDir(deps), hash));
+    });
+  program
+    .command('sandboxes:drain')
+    .description('stop admitting new sandboxes (running ones live out their time)')
+    .action(async () => {
+      deps.out(await sandboxesDrain(deps.db, true));
+    });
+  program
+    .command('sandboxes:undrain')
+    .description('admit new sandboxes again')
+    .action(async () => {
+      deps.out(await sandboxesDrain(deps.db, false));
     });
   return program;
 }

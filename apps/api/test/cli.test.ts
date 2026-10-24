@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { auditLog, users } from '@rootcamp/db';
+import { auditLog, settings, users } from '@rootcamp/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli.js';
@@ -89,4 +89,22 @@ describe('rootcamp-cli admin:grant', () => {
 
     await expect(run('nobody@x.ru')).rejects.toMatchObject({ code: 1 });
   }, 60_000);
+});
+
+describe('rootcamp-cli sandboxes:drain / sandboxes:undrain', () => {
+  it('writes settings.sandboxes_drained (jsonb true/false) and audit_log rows', async () => {
+    const { db } = h();
+    const c = capture();
+    expect(await runCli(['sandboxes:drain'], { db, ...c.io })).toBe(0);
+    expect(c.out.join('\n')).toMatch(/drained/);
+    const value = async () =>
+      (await db.select().from(settings).where(eq(settings.key, 'sandboxes_drained')))[0]?.value;
+    expect(await value()).toBe(true);
+
+    expect(await runCli(['sandboxes:undrain'], { db, ...c.io })).toBe(0);
+    expect(await value()).toBe(false);
+    const audit = await db.select().from(auditLog).orderBy(auditLog.id);
+    expect(audit.map((a) => a.action)).toEqual(['sandboxes.drain', 'sandboxes.undrain']);
+    expect(audit.every((a) => a.actorId === null)).toBe(true);
+  });
 });

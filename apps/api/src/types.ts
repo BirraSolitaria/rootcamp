@@ -25,5 +25,5 @@ export interface LimitOverride {
 /** Rate-limit overrides keyed by limit name (names are defined by the limiter, Task 7). */
 export type Limits = Partial<Record<string, LimitOverride>>;
 
-/** Placeholder until M4a defines it. */
-export type SandboxdClient = unknown;
+/** sandboxd internal API client (services/sandboxdClient.ts, M4a). */
+export type { SandboxdClient } from './services/sandboxdClient.js';

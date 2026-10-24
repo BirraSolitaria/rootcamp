@@ -1,6 +1,7 @@
 import type { Db } from '@rootcamp/db';
 import type { FastifyInstance } from 'fastify';
 import { SMTP_LAST_OK_KEY } from '../services/mailer.js';
+import type { SandboxdClient } from '../services/sandboxdClient.js';
 import { getSetting } from '../services/settings.js';
 
 const PING_TIMEOUT_MS = 2000;
@@ -33,14 +34,22 @@ async function smtpLastOkAt(db: Db): Promise<string | null> {
 }
 
 /**
- * `GET /api/health` → 200 `{db: true, smtpLastOkAt}` or 503 `{db: false, smtpLastOkAt: null}`;
- * used by the compose healthcheck. `smtpLastOkAt` (ISO or null) is informational: a stale value
- * means letters are piling up in the queue (spec §9), not that the api is unhealthy.
+ * `GET /api/health` → 200 `{db: true, sandboxd, smtpLastOkAt}` or 503 `{db: false, …}`; used by
+ * the compose healthcheck. Only `db` decides the status. `sandboxd` (its `GET /internal/health`
+ * answered 200 within 2 s; false when `SANDBOXD_URL` is unset — the api stays healthy) and
+ * `smtpLastOkAt` (ISO or null; a stale value means letters are piling up in the queue, spec §9)
+ * are informational.
  */
-export async function healthRoutes(app: FastifyInstance, opts: { db: Db }) {
+export async function healthRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; sandboxd?: SandboxdClient },
+) {
   app.get('/api/health', { config: { public: true } }, async (_req, reply) => {
-    const db = await pingDb(opts.db);
+    const [db, sandboxd] = await Promise.all([
+      pingDb(opts.db),
+      opts.sandboxd ? opts.sandboxd.health() : Promise.resolve(false),
+    ]);
     const lastOk = db ? await smtpLastOkAt(opts.db) : null;
-    return reply.code(db ? 200 : 503).send({ db, smtpLastOkAt: lastOk });
+    return reply.code(db ? 200 : 503).send({ db, sandboxd, smtpLastOkAt: lastOk });
   });
 }

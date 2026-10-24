@@ -44,6 +44,10 @@ export const LIMITS = {
   resendVerificationMinute: { max: 1, windowMs: MINUTE_MS },
   /** …and five times a day per user. */
   resendVerificationDay: { max: 5, windowMs: DAY_MS },
+  /** `POST /api/runs/:id/check`: once per 5 s per user (spec §5.1). */
+  practiceCheck: { max: 1, windowMs: 5_000 },
+  /** `POST /api/runs/:id/hints`: 10/min per user (plan M4a). */
+  practiceHints: { max: 10, windowMs: MINUTE_MS },
 } as const satisfies Record<string, LimitSpec>;
 
 export type LimitName = keyof typeof LIMITS;
@@ -152,6 +156,10 @@ export interface Limiters {
    * 1/min and 5/day, shared so an email change cannot bypass the resend limit.
    */
   verifyLetters: Limiter;
+  /** Key: userId. */
+  practiceCheck: Limiter;
+  /** Key: userId. */
+  practiceHints: Limiter;
 }
 
 export function createLimiters(overrides?: Limits): Limiters {
@@ -165,5 +173,7 @@ export function createLimiters(overrides?: Limits): Limiters {
     resetIp: one('resetIp'),
     changePassword: allOf(one('changePasswordMinute'), one('changePasswordHour')),
     verifyLetters: allOf(one('resendVerificationMinute'), one('resendVerificationDay')),
+    practiceCheck: one('practiceCheck'),
+    practiceHints: one('practiceHints'),
   };
 }

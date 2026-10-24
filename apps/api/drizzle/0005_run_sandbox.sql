@@ -1,0 +1,1 @@
+ALTER TABLE "practice_runs" ADD COLUMN "sandbox_id" uuid;
