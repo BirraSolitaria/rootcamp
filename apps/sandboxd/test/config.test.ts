@@ -63,6 +63,12 @@ describe('loadConfig', () => {
     });
   });
 
+  test('TICKET_SECRET must be set (an empty HMAC key would accept forged tickets)', () => {
+    expect(() => loadConfig({ ...env, TICKET_SECRET: '' })).toThrow(/TICKET_SECRET: is required/);
+    expect(() => loadConfig({ ...env, TICKET_SECRET: '   ' })).toThrow(/TICKET_SECRET/);
+    expect(() => loadConfig({ ...env, TICKET_SECRET: 'short' })).toThrow(/TICKET_SECRET/);
+  });
+
   test('names every invalid variable', () => {
     expect(() =>
       loadConfig({

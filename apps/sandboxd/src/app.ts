@@ -16,6 +16,7 @@ import { Lifecycle } from './lifecycle.js';
 import { Metrics } from './metrics.js';
 import { reconcileOnStart } from './reconcile.js';
 import { internalRoutes } from './routes/internal.js';
+import { TerminalRegistry, terminalRoutes, type TerminalOptions } from './terminal.js';
 
 /** Gateway of `rc-sbx` (spec §6.3): dnsmasq answering only for the mirrors. */
 const SYSBOX_DNS = ['172.30.0.1'];
@@ -55,15 +56,20 @@ export interface AppDeps {
   housekeeping?: boolean;
   /** Default: a `Metrics` over `driver` and the ready rows of `db`. */
   metrics?: Metrics;
-  /** Open terminal WebSockets per sandbox for the GC's idle rule (Task 6); default none. */
+  /**
+   * Open terminal WebSockets per sandbox for the GC's idle rule; default: the terminal
+   * registry's live count. Tests override it.
+   */
   connectionCount?: (sandboxId: string) => number;
+  /** Terminal WebSocket knobs for tests (silence timeout, clock). */
+  terminal?: Pick<TerminalOptions, 'silenceMs' | 'now'>;
   /** Fastify logger option; default: off. */
   logger?: FastifyServerOptions['logger'];
   loggerInstance?: FastifyBaseLogger;
 }
 
 /**
- * sandboxd's HTTP server: the internal REST (§5.3) and, from Task 6, the terminal WebSocket.
+ * sandboxd's HTTP server: the internal REST (§5.3) and the terminal WebSocket (§5.2).
  * The app owns the lifecycle's scheduler loop: started on `ready`, stopped (in-flight starts
  * awaited) on `close`.
  */
@@ -100,20 +106,29 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       usageOf: (id) => metrics.usageOf(id),
       log: app.log,
     });
+  const terminals = new TerminalRegistry();
   const gc = new Gc({
     db: deps.db,
     driver: deps.driver,
     lifecycle,
-    ...(deps.connectionCount ? { connectionCount: deps.connectionCount } : {}),
+    connectionCount: deps.connectionCount ?? ((id) => terminals.count(id)),
     onDiskUsage: (id, mb) => metrics.setDiskMb(id, mb),
     log: app.log,
   });
   app.decorate('lifecycle', lifecycle);
   app.decorate('gc', gc);
   app.decorate('metrics', metrics);
+  app.decorate('terminals', terminals);
   let events: EventWatcher | undefined;
   app.get('/healthz', async () => ({ ok: true, driver: deps.driver.name }));
   await app.register(internalRoutes, { lifecycle, metrics, token: deps.config.internalToken });
+  await app.register(terminalRoutes, {
+    lifecycle,
+    driver: deps.driver,
+    secret: deps.config.ticketSecret,
+    registry: terminals,
+    ...deps.terminal,
+  });
   app.addHook('onReady', async () => {
     if (deps.housekeeping) {
       // Events first, so a container dying during the reconcile is not missed; reconcile
@@ -139,8 +154,10 @@ declare module 'fastify' {
   interface FastifyInstance {
     /** The sandbox lifecycle: Task 5 (GC, events) and Task 6 (terminal) hook into it. */
     lifecycle: Lifecycle;
-    /** The GC; Task 6 calls `gc.setConnectionCount(...)` with its terminal registry. */
+    /** The GC; its connection count is `terminals.count` unless `connectionCount` is given. */
     gc: Gc;
     metrics: Metrics;
+    /** Open terminal WebSockets per sandbox (`count` feeds the GC's idle rule). */
+    terminals: TerminalRegistry;
   }
 }
