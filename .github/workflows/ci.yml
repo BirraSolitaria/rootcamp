@@ -33,8 +33,14 @@ jobs:
 
       - run: pnpm typecheck
 
+      # @rootcamp/sandboxd's Docker-backed suites run containers from rc/test-shell; dockerode
+      # does not pull, and the image is local-only anyway.
+      - name: Build rc/test-shell
+        run: docker build -t rc/test-shell -f sandbox/images/test-shell/Dockerfile sandbox/images
+
       # Unit tests. @rootcamp/api (Testcontainers) runs in `integration`; @rootcamp/logic runs
-      # once, under coverage, in the next step.
+      # once, under coverage, in the next step. @rootcamp/sandboxd's suites use the runner's
+      # Docker (Testcontainers PostgreSQL + rc/test-shell).
       - name: Unit tests
         run: pnpm turbo run test --filter='!@rootcamp/api' --filter='!@rootcamp/logic'
 
