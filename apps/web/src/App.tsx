@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { setNavigator } from './api/client';
 import { ROUTER_FUTURE } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { RequireUser } from './components/guards';
+import { Loading, RequireUser } from './components/guards';
 import { CheckEmail } from './screens/auth/CheckEmail';
 import { Forgot } from './screens/auth/Forgot';
 import { Login } from './screens/auth/Login';
@@ -13,9 +13,15 @@ import { Reset } from './screens/auth/Reset';
 import { Verify } from './screens/auth/Verify';
 import { LessonScreen } from './screens/Lesson/LessonScreen';
 import { PathIndex, PathScreen } from './screens/Path/PathScreen';
-import { PracticeCatalog } from './screens/Practice/PracticeCatalog';
-import { PracticeScreen } from './screens/Practice/PracticeScreen';
 import { ReviewScreen } from './screens/Review/ReviewScreen';
+
+// The practice screens carry xterm.js; keep it out of the main chunk.
+const PracticeCatalog = lazy(() =>
+  import('./screens/Practice/PracticeCatalog').then((m) => ({ default: m.PracticeCatalog })),
+);
+const PracticeScreen = lazy(() =>
+  import('./screens/Practice/PracticeScreen').then((m) => ({ default: m.PracticeScreen })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
@@ -59,11 +65,27 @@ export function App() {
             />
             <Route
               path="/practice"
-              element={<RequireUser>{(me) => <PracticeCatalog me={me} />}</RequireUser>}
+              element={
+                <RequireUser>
+                  {(me) => (
+                    <Suspense fallback={<Loading />}>
+                      <PracticeCatalog me={me} />
+                    </Suspense>
+                  )}
+                </RequireUser>
+              }
             />
             <Route
               path="/practice/:practiceId"
-              element={<RequireUser>{(me) => <PracticeScreen me={me} />}</RequireUser>}
+              element={
+                <RequireUser>
+                  {(me) => (
+                    <Suspense fallback={<Loading />}>
+                      <PracticeScreen me={me} />
+                    </Suspense>
+                  )}
+                </RequireUser>
+              }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

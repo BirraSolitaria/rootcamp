@@ -5,7 +5,8 @@ import { errorText } from '../api/messages';
 import { useMe } from '../api/queries';
 import { Mascot } from './Mascot';
 
-function Loading() {
+/** Full-screen waiting mascot: session lookup and lazy-loaded screens. */
+export function Loading() {
   return (
     <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
       <Mascot state="waiting" />
