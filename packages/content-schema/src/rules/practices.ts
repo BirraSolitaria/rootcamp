@@ -5,6 +5,11 @@ import { asArray, at, isObj, isStr, reqStr, type Obj, type RuleContext } from '.
 // Also R5 for the practice texts (brief 100–700 characters, §4.2).
 
 const BRIEF = { min: 100, max: 700 };
+/**
+ * Goals are checked one after another in a single exec request, which the api gives 45 s
+ * (SANDBOXD_TIMEOUTS_MS.execChecks); the sum of goal timeouts stays below that with headroom.
+ */
+const MAX_TOTAL_CHECK_SEC = 40;
 const SETUP = 'setup.sh';
 const SOLUTION = 'solution.sh';
 /** shellcheck levels that fail validation (§4.3: warning and above). */
@@ -58,6 +63,17 @@ export async function checkPractices(
         ctx.error('R18', at(pf, `goals[${i}].check`), `файл проверки '${String(check)}' не найден`);
       else script(check);
     });
+    const totalCheckSec = asArray(m.goals).reduce<number>(
+      (sum, goal) => sum + (isObj(goal) ? Number(goal.timeoutSec) || 0 : 0),
+      0,
+    );
+    if (totalCheckSec > MAX_TOTAL_CHECK_SEC) {
+      ctx.error(
+        'R18',
+        at(pf, 'goals'),
+        `сумма timeoutSec целей ${totalCheckSec} с > ${MAX_TOTAL_CHECK_SEC} с`,
+      );
+    }
     if (!has(SETUP)) ctx.error('R18', practice.dir, `нет ${SETUP}`);
     else script(SETUP);
     if (m.solution !== SOLUTION) {

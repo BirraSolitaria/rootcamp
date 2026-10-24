@@ -208,6 +208,23 @@ describe('rule details', () => {
     ]);
   });
 
+  it('R18: goal timeouts of a practice sum to at most 40 s', async () => {
+    const t = base();
+    const goals = practice(t).manifest.goals;
+    goals[0].timeoutSec = 30;
+    goals[1].timeoutSec = 10;
+    expect(await validate(t)).toEqual([]); // exactly 40 s
+    goals[1].timeoutSec = 11;
+    expect(await validate(t)).toEqual([
+      expect.objectContaining({
+        rule: 'R18',
+        path: 'practices/inc-demo/practice.yaml#goals',
+        message: 'сумма timeoutSec целей 41 с > 40 с',
+        severity: 'error',
+      }),
+    ]);
+  });
+
   it('R17: order_steps steps equal after normalize', async () => {
     const t = base();
     task(t, 9).steps = ['Нажать Enter', ' нажать  enter', 'Прочитать вывод'];
