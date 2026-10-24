@@ -1,0 +1,32 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.key {
+  min-height: var(--touch);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hi);
+  color: var(--ink);
+  font: 500 14px/1 var(--font-mono);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.key:active {
+  background: var(--edge);
+}
+
+.armed {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  color: var(--amber);
+}

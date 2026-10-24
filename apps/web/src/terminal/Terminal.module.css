@@ -1,0 +1,52 @@
+.area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--term);
+}
+
+.compact {
+  min-height: 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+
+.screen {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Below 40 columns at 11 px the host gets a fixed width and this scrolls sideways (§8.3). */
+.scroller {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-xs) 0 0 var(--space-sm);
+  box-sizing: border-box;
+}
+
+.host {
+  height: 100%;
+  min-width: 100%;
+}
+
+.banner {
+  position: absolute;
+  inset: auto var(--space-md) var(--space-md);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 14px/20px var(--font-sans);
+}
