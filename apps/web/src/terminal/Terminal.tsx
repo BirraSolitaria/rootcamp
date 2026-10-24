@@ -19,6 +19,9 @@ export const FONT_SIZE = 14;
 export const FONT_SIZE_COMPACT = 12.5;
 export const FONT_SIZE_MIN = 11;
 export const MIN_COLS = 40;
+/** The family at open(); after the face loads, an equivalent string (a change makes xterm measure). */
+const FONT_FAMILY = 'JetBrains Mono';
+const FONT_FAMILY_LOADED = "'JetBrains Mono', monospace";
 
 export interface TerminalProps {
   runId: string;
@@ -157,7 +160,7 @@ export function Terminal({ runId, compact, onCtl, onStateChange, getTicket }: Te
     const scroller = scrollerRef.current;
     if (!host || !scroller) return;
     const term = new XTerm({
-      fontFamily: 'JetBrains Mono',
+      fontFamily: FONT_FAMILY,
       fontSize: baseFontRef.current,
       theme: themeFromTokens(),
       scrollback: 3000,
@@ -186,11 +189,20 @@ export function Terminal({ runId, compact, onCtl, onStateChange, getTicket }: Te
     const ro = new ResizeObserver(() => refit());
     ro.observe(scroller);
     refit();
-    // Metrics measured before JetBrains Mono loaded are off: refit once fonts are in.
+    // xterm measures its cell at open() and again only when fontFamily or fontSize changes. If
+    // JetBrains Mono was still loading (e.g. a reload straight onto a ready sandbox), the cell is
+    // the fallback font's: the glyphs come out spaced apart and the pty gets a wrong size. Once
+    // the face is loaded, switch to an equivalent family string so xterm measures again, refit.
     let alive = true;
-    void document.fonts?.ready.then(() => {
-      if (alive) refit();
-    });
+    const remeasure = () => {
+      if (!alive) return;
+      term.options.fontFamily = FONT_FAMILY_LOADED;
+      refit();
+    };
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (fonts?.load) {
+      fonts.load(`${baseFontRef.current}px "JetBrains Mono"`).then(remeasure, remeasure);
+    }
 
     return () => {
       alive = false;
