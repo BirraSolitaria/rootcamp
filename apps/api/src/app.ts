@@ -90,7 +90,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     boss: deps.boss,
     now: deps.now,
     ticketSecret: deps.config.TICKET_SECRET,
-    publicOrigin: deps.config.PUBLIC_ORIGIN,
     limiters,
     log: app.log,
   });

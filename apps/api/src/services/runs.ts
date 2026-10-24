@@ -24,6 +24,7 @@ import { signTicket } from '@rootcamp/api-contract/ticket';
 import {
   practiceProgress,
   practiceRuns,
+  sandboxes,
   sandboxUsage,
   streaks,
   users,
@@ -36,7 +37,7 @@ import {
   practiceXp,
   toDateKey,
 } from '@rootcamp/logic';
-import { and, asc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type PgBoss from 'pg-boss';
 import { enforce } from '../plugins/rateLimit.js';
 import { HttpError, rateLimited } from '../plugins/errors.js';
@@ -143,8 +144,6 @@ export interface RunsDeps {
   boss: Pick<PgBoss, 'send'> | null;
   now: () => number;
   ticketSecret: string;
-  /** `PUBLIC_ORIGIN`; the terminal URL is its ws(s) twin. */
-  publicOrigin: string;
   limiters: Pick<Limiters, 'practiceCheck' | 'practiceHints'>;
   log?: RunsLog;
 }
@@ -209,10 +208,15 @@ export function createRunSync(deps: Pick<RunsDeps, 'db' | 'sandboxd' | 'now' | '
     return current ?? row;
   }
 
+  /** Run id → when a pass first saw it active without a sandbox (this process only). */
+  const orphanSince = new Map<string, number>();
+
   /**
-   * `runs-sync`: every unfinished run against its sandbox (passive reads). A `queued` run without
-   * a sandbox older than `orphanRunMs` lost its create (api restart) and is failed. Errors on one
-   * run are logged and do not stop the others. A no-op without sandboxd.
+   * `runs-sync`: every unfinished run against its sandbox (passive reads). An active run that
+   * stays without a sandbox for more than `orphanRunMs` lost its create or reset (api restart)
+   * and is failed: a fresh `queued` run counted from `created_at`, a claimed reset from the first
+   * pass that saw it. Errors on one run are logged and do not stop the others. A no-op without
+   * sandboxd.
    */
   async function syncOpenRuns(): Promise<{ checked: number; changed: number }> {
     if (!deps.sandboxd) return { checked: 0, changed: 0 };
@@ -221,11 +225,21 @@ export function createRunSync(deps: Pick<RunsDeps, 'db' | 'sandboxd' | 'now' | '
       .from(practiceRuns)
       .where(inArray(practiceRuns.status, [...ACTIVE]));
     let changed = 0;
+    const at = deps.now();
+    for (const id of orphanSince.keys()) {
+      if (!rows.some((r) => r.id === id && r.sandboxId === null)) orphanSince.delete(id);
+    }
     for (const row of rows) {
       try {
         if (!row.sandboxId) {
-          if (row.createdAt.getTime() < deps.now() - RUN_LIMITS.orphanRunMs) {
+          // No sandbox: a create or reset is in flight, or the api died during one. A fresh
+          // `queued` run counts from its creation; a claimed reset from when a pass first saw it.
+          const fresh = row.status === 'queued' && row.resets === 0;
+          const since = orphanSince.get(row.id) ?? (fresh ? row.createdAt.getTime() : at);
+          orphanSince.set(row.id, since);
+          if (at - since > RUN_LIMITS.orphanRunMs) {
             await setStatus(row, 'failed');
+            orphanSince.delete(row.id);
             changed++;
           }
           continue;
@@ -396,18 +410,95 @@ export function createRunService(deps: RunsDeps) {
       view = await sandboxd.create(sandboxBody(runId, user.id, practice));
     } catch (err) {
       await db.delete(practiceRuns).where(eq(practiceRuns.id, runId));
+      if (err instanceof SandboxdError && err.code === 'run_exists') {
+        const other = await activeRunIdOf(user.id, runId);
+        throw new HttpError(
+          409,
+          'run_exists',
+          'another sandbox of yours is still running',
+          other ? { runId: other } : undefined,
+        );
+      }
       throw err instanceof HttpError ? err : fromSandboxd(err);
     }
     const state = runStatusOf(view);
-    await db
+    const attached = await attachSandbox(runId, 'queued', view);
+    if (!attached) {
+      // Stopped while the create was in flight: the new sandbox must not outlive the run.
+      await discard(view.sandboxId);
+      const [cur] = await db.select().from(practiceRuns).where(eq(practiceRuns.id, runId));
+      return { runId, state: cur?.status ?? 'stopped', queuePosition: null };
+    }
+    return { runId, state, queuePosition: view.queuePosition };
+  }
+
+  /**
+   * Writes a just-created sandbox onto its run, only if the run is still in the state the create
+   * left it in (`claimed`, no sandbox). False: a stop (or anything else) changed it meanwhile.
+   */
+  async function attachSandbox(
+    runId: string,
+    claimed: RunState,
+    view: SandboxView,
+  ): Promise<boolean> {
+    const state = runStatusOf(view);
+    const updated = await db
       .update(practiceRuns)
       .set({
         sandboxId: view.sandboxId,
         status: state,
         endedAt: isActive(state) ? null : new Date(now()),
       })
-      .where(eq(practiceRuns.id, runId));
-    return { runId, state, queuePosition: view.queuePosition };
+      .where(
+        and(
+          eq(practiceRuns.id, runId),
+          eq(practiceRuns.status, claimed),
+          sql`${practiceRuns.sandboxId} is null`,
+        ),
+      )
+      .returning({ id: practiceRuns.id });
+    return updated.length > 0;
+  }
+
+  /** Removes a sandbox no run owns any more; failures are logged (idle / TTL end it anyway). */
+  async function discard(sandboxId: string): Promise<void> {
+    try {
+      await client().remove(sandboxId, 'stopped_by_user');
+    } catch (err) {
+      deps.log?.warn({ err, sandboxId }, 'orphaned sandbox could not be removed');
+    }
+  }
+
+  /**
+   * The run behind the user's active sandbox, for a `run_exists` that came from sandboxd: an
+   * active run in `practice_runs` other than `exceptRunId`, else the `run_id` of the user's
+   * queued…ready row in `sandboxes` if it is one of their runs.
+   */
+  async function activeRunIdOf(userId: string, exceptRunId: string): Promise<string | null> {
+    const [run] = await db
+      .select({ id: practiceRuns.id })
+      .from(practiceRuns)
+      .where(
+        and(
+          eq(practiceRuns.userId, userId),
+          inArray(practiceRuns.status, [...ACTIVE]),
+          ne(practiceRuns.id, exceptRunId),
+        ),
+      );
+    if (run) return run.id;
+    const [sbx] = await db
+      .select({ runId: practiceRuns.id })
+      .from(sandboxes)
+      .innerJoin(practiceRuns, eq(practiceRuns.id, sandboxes.runId))
+      .where(
+        and(
+          eq(sandboxes.userId, userId),
+          inArray(sandboxes.state, ['queued', 'starting', 'ready']),
+          eq(practiceRuns.userId, userId),
+          ne(practiceRuns.id, exceptRunId),
+        ),
+      );
+    return sbx?.runId ?? null;
   }
 
   /** `GET /api/runs/:runId`: syncs an unfinished run, then the screen's whole state. */
@@ -460,8 +551,8 @@ export function createRunService(deps: RunsDeps) {
       },
       deps.ticketSecret,
     );
-    const ws = deps.publicOrigin.replace(/^http/, 'ws');
-    return { ticket, url: `${ws}/ws/terminal?ticket=${encodeURIComponent(ticket)}` };
+    // Relative (spec §5.1): same origin through Caddy; the client builds ws(s):// from location.
+    return { ticket, url: `/ws/terminal?ticket=${encodeURIComponent(ticket)}` };
   }
 
   async function scheduleStopSolved(job: StopSolvedJob): Promise<void> {
@@ -653,7 +744,10 @@ export function createRunService(deps: RunsDeps) {
 
   /**
    * `POST /api/runs/:runId/reset` (≤ 3 per run, `409 reset_limit` after): the sandbox is
-   * removed (`reset`) and created again under the same run. A refused re-create fails the run.
+   * removed (`reset`) and created again under the same run. The reset is claimed in the row lock
+   * (`starting`, `sandbox_id = null`), so a second reset meanwhile gets `409 validation`; the
+   * new sandbox is attached, or a refused re-create fails the run, only while that claim holds. A
+   * stop in between wins: the new sandbox is removed and the reset answers `409 validation`.
    */
   async function reset(user: RunUser, runId: string): Promise<ResetRunResponse> {
     const sandboxd = client();
@@ -669,26 +763,34 @@ export function createRunService(deps: RunsDeps) {
       if (cur.resets >= RUN_LIMITS.resetsPerRun) {
         throw new HttpError(409, 'reset_limit', 'this run has been reset 3 times already');
       }
+      // No sandbox: another reset (or the run's first create) is in flight.
+      if (!cur.sandboxId) throw new HttpError(409, 'validation', 'a reset is already in progress');
+      // The claim: `starting` without a sandbox until this reset attaches the new one.
       await tx
         .update(practiceRuns)
-        .set({ resets: cur.resets + 1, status: 'starting' })
+        .set({ resets: cur.resets + 1, status: 'starting', sandboxId: null })
         .where(eq(practiceRuns.id, cur.id));
       return cur.sandboxId;
     });
 
+    /** Fails the run only while this reset still holds its claim (a stop wins). */
     const fail = async (err: unknown): Promise<never> => {
       await db
         .update(practiceRuns)
         .set({ status: 'failed', endedAt: new Date(now()) })
-        .where(eq(practiceRuns.id, row.id));
+        .where(
+          and(
+            eq(practiceRuns.id, row.id),
+            eq(practiceRuns.status, 'starting'),
+            sql`${practiceRuns.sandboxId} is null`,
+          ),
+        );
       throw fromSandboxd(err);
     };
-    if (old) {
-      try {
-        await sandboxd.remove(old, 'reset');
-      } catch (err) {
-        if (!(err instanceof SandboxdError && err.status === 404)) await fail(err);
-      }
+    try {
+      await sandboxd.remove(old, 'reset');
+    } catch (err) {
+      if (!(err instanceof SandboxdError && err.status === 404)) await fail(err);
     }
     let view: SandboxView;
     try {
@@ -696,15 +798,10 @@ export function createRunService(deps: RunsDeps) {
     } catch (err) {
       return fail(err);
     }
-    const state = runStatusOf(view);
-    await db
-      .update(practiceRuns)
-      .set({
-        sandboxId: view.sandboxId,
-        status: state,
-        endedAt: isActive(state) ? null : new Date(now()),
-      })
-      .where(eq(practiceRuns.id, row.id));
+    if (!(await attachSandbox(row.id, 'starting', view))) {
+      await discard(view.sandboxId);
+      throw new HttpError(409, 'validation', 'this run is over');
+    }
     return { state: 'starting' };
   }
 

@@ -18,6 +18,7 @@ import {
   lessonCompletions,
   practiceProgress,
   practiceRuns,
+  sandboxes,
   sandboxUsage,
   streaks,
   users,
@@ -499,7 +500,7 @@ describe('reset, extend, stop, terminal ticket', () => {
     });
   });
 
-  it('terminal-ticket: ws(s) URL from PUBLIC_ORIGIN, signed, exp = now + 30 s', async () => {
+  it('terminal-ticket: relative /ws/terminal URL (spec §5.1), signed, exp = now + 30 s', async () => {
     const { id, cookies } = await signIn();
     const queued = await createRun(cookies);
     expect((await post(cookies, `/api/runs/${queued.runId}/terminal-ticket`)).statusCode).toBe(409);
@@ -507,7 +508,7 @@ describe('reset, extend, stop, terminal ticket', () => {
     const res = await post(cookies, `/api/runs/${queued.runId}/terminal-ticket`);
     expect(res.statusCode, res.body).toBe(200);
     const { ticket, url } = TerminalTicketResponse.parse(res.json());
-    expect(url).toBe(`ws://127.0.0.1:8080/ws/terminal?ticket=${encodeURIComponent(ticket)}`);
+    expect(url).toBe(`/ws/terminal?ticket=${encodeURIComponent(ticket)}`);
     const payload = verifyTicket(ticket, TICKET_SECRET, h().clock.now());
     expect(payload).toMatchObject({
       runId: queued.runId,
@@ -520,6 +521,139 @@ describe('reset, extend, stop, terminal ticket', () => {
       (await post(cookies, `/api/runs/${queued.runId}/terminal-ticket`)).json(),
     );
     expect(verifyTicket(again.ticket, TICKET_SECRET, h().clock.now()).jti).not.toBe(payload.jti);
+  });
+});
+
+describe('concurrent resets and stops (fix round 1)', () => {
+  /** Polls until `cond` holds (requests in flight resolve on the event loop). */
+  async function waitFor(cond: () => boolean | Promise<boolean>, what: string): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    while (!(await cond())) {
+      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+  const creates = () => fake.calls.filter((c) => c.method === 'create').length;
+  const liveOf = (userId: string) =>
+    [...fake.sandboxes.values()].filter(
+      (s) => s.body.userId === userId && ['queued', 'starting', 'ready'].includes(s.view.state),
+    );
+
+  it('a reset while another is in flight → 409 validation; the run keeps one live sandbox', async () => {
+    const { id, cookies } = await signIn();
+    const { runId, sandboxId } = await readyRun(cookies);
+    const release = fake.holdCreates();
+    const first = post(cookies, `/api/runs/${runId}/reset`);
+    await waitFor(() => creates() === 2, 'the first reset to reach create');
+    const second = await post(cookies, `/api/runs/${runId}/reset`);
+    expect(second.statusCode).toBe(409);
+    expect(errorOf(second).code).toBe('validation');
+    release();
+    expect((await first).statusCode).toBe(200);
+
+    const row = await runRow(runId);
+    expect(row).toMatchObject({ status: 'queued', resets: 1 });
+    expect(fake.sandboxes.get(sandboxId)!.removedWith).toBe('reset');
+    expect(liveOf(id).map((s) => s.view.sandboxId)).toEqual([row.sandboxId]);
+  });
+
+  it('two resets at once: never failed, exactly one live sandbox, the run points at it', async () => {
+    const { id, cookies } = await signIn();
+    const { runId } = await readyRun(cookies);
+    const results = await Promise.all([
+      post(cookies, `/api/runs/${runId}/reset`),
+      post(cookies, `/api/runs/${runId}/reset`),
+    ]);
+    const codes = results.map((r) => r.statusCode).sort();
+    expect([
+      [200, 200],
+      [200, 409],
+    ]).toContainEqual(codes);
+    const row = await runRow(runId);
+    expect(row.status).not.toBe('failed');
+    expect(row.resets).toBe(codes[1] === 200 ? 2 : 1);
+    expect(liveOf(id).map((s) => s.view.sandboxId)).toEqual([row.sandboxId]);
+  });
+
+  it('a stop while the first create is in flight wins: run stopped, new sandbox removed', async () => {
+    const { id, cookies } = await signIn();
+    const release = fake.holdCreates();
+    const created = post(cookies, `/api/practices/${PRACTICE}/runs`);
+    await waitFor(() => creates() === 1, 'the create call');
+    const [run] = await h().db.select().from(practiceRuns).where(eq(practiceRuns.userId, id));
+    expect(run).toMatchObject({ status: 'queued', sandboxId: null });
+    expect((await post(cookies, `/api/runs/${run!.id}/stop`)).statusCode).toBe(204);
+    release();
+    const res = await created;
+    expect(res.statusCode, res.body).toBe(201);
+    expect(res.json()).toMatchObject({ runId: run!.id, state: 'stopped' });
+    expect(await runRow(run!.id)).toMatchObject({ status: 'stopped', sandboxId: null });
+    expect(fake.latestFor(run!.id)!.removedWith).toBe('stopped_by_user');
+    expect(liveOf(id)).toEqual([]);
+    await createRun(cookies);
+  });
+
+  it('a stop while a reset re-creates wins: run stopped, new sandbox removed, 409', async () => {
+    const { id, cookies } = await signIn();
+    const { runId } = await readyRun(cookies);
+    const release = fake.holdCreates();
+    const reset = post(cookies, `/api/runs/${runId}/reset`);
+    await waitFor(() => creates() === 2, 'the reset create');
+    expect((await post(cookies, `/api/runs/${runId}/stop`)).statusCode).toBe(204);
+    release();
+    const res = await reset;
+    expect(res.statusCode).toBe(409);
+    expect(errorOf(res).code).toBe('validation');
+    expect((await runRow(runId)).status).toBe('stopped');
+    expect(fake.latestFor(runId)!.removedWith).toBe('stopped_by_user');
+    expect(liveOf(id)).toEqual([]);
+  });
+
+  it('run_exists from sandboxd carries the runId of the sandbox that holds the slot', async () => {
+    const { id, cookies } = await signIn();
+    const held = await createRun(cookies);
+    // Desync: the DB thinks the run ended, but its sandbox (sandboxd's row) is still queued.
+    await h()
+      .db.update(practiceRuns)
+      .set({ status: 'stopped' })
+      .where(eq(practiceRuns.id, held.runId));
+    await h()
+      .db.insert(sandboxes)
+      .values({
+        id: sandboxOf(held.runId),
+        runId: held.runId,
+        userId: id,
+        image: 'rc/linux-base:24.04',
+        class: 'light',
+        cpu: 0.5,
+        memMb: 512,
+        state: 'queued',
+        hostname: 'incident-0001',
+        setupScript: 'true',
+        setupTimeoutSec: 60,
+        ttlMin: 20,
+      });
+    const res = await post(cookies, `/api/practices/${PRACTICE}/runs`);
+    expect(res.statusCode).toBe(409);
+    expect(errorOf(res)).toMatchObject({ code: 'run_exists', runId: held.runId });
+    const rows = await h().db.select().from(practiceRuns).where(eq(practiceRuns.userId, id));
+    expect(rows.map((r) => r.id)).toEqual([held.runId]);
+  });
+
+  it('runs-sync fails a run left without a sandbox by a crashed reset after 5 min', async () => {
+    const { cookies } = await signIn();
+    const { runId } = await readyRun(cookies);
+    await h()
+      .db.update(practiceRuns)
+      .set({ status: 'starting', sandboxId: null, resets: 1 })
+      .where(eq(practiceRuns.id, runId));
+    const sync = createRunSync({ db: h().db, sandboxd: fake, now: h().clock.now });
+    expect(await sync.syncOpenRuns()).toEqual({ checked: 1, changed: 0 });
+    h().clock.advance(4 * 60 * SEC);
+    expect(await sync.syncOpenRuns()).toEqual({ checked: 1, changed: 0 });
+    h().clock.advance(2 * 60 * SEC);
+    expect(await sync.syncOpenRuns()).toEqual({ checked: 1, changed: 1 });
+    expect((await runRow(runId)).status).toBe('failed');
   });
 });
 

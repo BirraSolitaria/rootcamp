@@ -184,6 +184,11 @@ export interface FakeSandboxdClient extends SandboxdClient {
   /** Makes `create` fail with this sandboxd error (status, code) until cleared with null. */
   failCreate(err: { status: number; code: string } | null): void;
   setHealthy(ok: boolean): void;
+  /**
+   * Makes the next `create` calls wait (after being recorded in `calls`) until the returned
+   * function is called: lets a test land a request while a create is in flight.
+   */
+  holdCreates(): () => void;
   readonly sandboxes: Map<string, FakeSandbox>;
   readonly calls: FakeCall[];
   /** The newest sandbox created for `runId`. */
@@ -200,6 +205,7 @@ export function createFakeSandboxdClient(now: () => number = Date.now): FakeSand
   let exitCodes: number[] = [];
   let createError: { status: number; code: string } | null = null;
   let healthy = true;
+  let gate: Promise<void> | null = null;
 
   function find(id: string): FakeSandbox {
     const s = sandboxes.get(id);
@@ -243,6 +249,14 @@ export function createFakeSandboxdClient(now: () => number = Date.now): FakeSand
     setHealthy(ok) {
       healthy = ok;
     },
+    holdCreates() {
+      let release!: () => void;
+      gate = new Promise<void>((r) => (release = r));
+      return () => {
+        gate = null;
+        release();
+      };
+    },
     latestFor(runId) {
       let last: FakeSandbox | undefined;
       for (const s of sandboxes.values()) if (s.body.runId === runId) last = s;
@@ -250,6 +264,7 @@ export function createFakeSandboxdClient(now: () => number = Date.now): FakeSand
     },
     async create(body) {
       calls.push({ method: 'create', arg: body });
+      if (gate) await gate;
       if (createError) throw new SandboxdError(createError.status, createError.code, 'fake');
       for (const s of sandboxes.values()) {
         if (body.userId && s.body.userId === body.userId && ACTIVE.includes(s.view.state)) {

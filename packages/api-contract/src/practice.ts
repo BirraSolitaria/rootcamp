@@ -64,7 +64,10 @@ export const RunDto = z.object({
 });
 export type RunDto = z.infer<typeof RunDto>;
 
-/** `POST /api/runs/:runId/terminal-ticket`: single-use, lives 30 s. */
+/**
+ * `POST /api/runs/:runId/terminal-ticket`: single-use, lives 30 s. `url` is relative
+ * (`/ws/terminal?ticket=…`, same origin through Caddy): the client turns it into ws(s)://.
+ */
 export const TerminalTicketResponse = z.object({ ticket: z.string(), url: z.string() });
 export type TerminalTicketResponse = z.infer<typeof TerminalTicketResponse>;
 
