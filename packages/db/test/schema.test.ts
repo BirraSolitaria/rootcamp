@@ -35,6 +35,14 @@ describe('@rootcamp/db schema', () => {
     ).toEqual(['lesson_completions', 'review_items', 'learning_sessions']);
   });
 
+  it('exports the M4a practice tables under their SQL names', () => {
+    expect(
+      [schema.practiceProgress, schema.practiceRuns, schema.sandboxes, schema.sandboxUsage].map(
+        getTableName,
+      ),
+    ).toEqual(['practice_progress', 'practice_runs', 'sandboxes', 'sandbox_usage']);
+  });
+
   it('default settings are registration open and 50 users', () => {
     expect(DEFAULT_SETTINGS).toEqual({ registration_mode: 'open', max_users: 50 });
   });

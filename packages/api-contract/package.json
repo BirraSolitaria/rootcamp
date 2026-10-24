@@ -11,6 +11,11 @@
       "rootcamp-src": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./ticket": {
+      "rootcamp-src": "./src/node/ticket.ts",
+      "types": "./dist/node/ticket.d.ts",
+      "default": "./dist/node/ticket.js"
     }
   },
   "scripts": {
