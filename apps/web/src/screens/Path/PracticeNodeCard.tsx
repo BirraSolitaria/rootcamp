@@ -9,7 +9,7 @@ const LABEL: Record<PracticeStatus, string> = {
   solved: 'решена',
 };
 
-/** A practice node of the path: a card with a terminal icon (the practice screen comes in M4). */
+/** A practice node of the path: a card with a terminal icon, opening `/practice/:id` unless locked. */
 export function PracticeNodeCard({
   practiceId,
   title,

@@ -1,4 +1,9 @@
-import type { ContentVersionDto, MeDto, ProgressDto } from '@rootcamp/api-contract';
+import type {
+  ContentVersionDto,
+  MeDto,
+  PracticeListItem,
+  ProgressDto,
+} from '@rootcamp/api-contract';
 import type { Catalog, Track } from '@rootcamp/content-schema';
 import { layerHash } from '@rootcamp/logic';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -75,6 +80,7 @@ const me: MeDto = {
 };
 
 let completed: string[] = [];
+let practiceList: PracticeListItem[] = [];
 
 const server = setupServer(
   http.get('*/api/me', () => HttpResponse.json(me)),
@@ -86,6 +92,7 @@ const server = setupServer(
   ),
   http.get(`*/content/${VERSION}/catalog.json`, () => HttpResponse.json(catalog)),
   http.get('*/api/progress', () => HttpResponse.json(progress(completed))),
+  http.get('*/api/practices', () => HttpResponse.json(practiceList)),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -94,6 +101,7 @@ afterAll(() => server.close());
 
 beforeEach(() => {
   completed = ['t1.s01.l01'];
+  practiceList = [];
   window.localStorage.clear();
 });
 
@@ -206,5 +214,68 @@ describe('Path screen', () => {
   it('an unknown track id falls back to «/»', async () => {
     renderPath('/track/nope');
     expect(await screen.findByText('/track/t1')).toBeInTheDocument();
+  });
+
+  it('«Инцидент дня» is the first available unsolved practice; hidden without one', async () => {
+    const item = (id: string, status: PracticeListItem['status']): PracticeListItem => ({
+      id,
+      title: `Инцидент ${id}`,
+      track: 't1',
+      status,
+      solved: status === 'solved',
+      anchorLessonId: null,
+    });
+    practiceList = [
+      item('inc-a', 'solved'),
+      item('inc-b', 'available'),
+      item('inc-c', 'available'),
+    ];
+    const first = renderPath('/track/t1');
+    const card = await screen.findByRole('region', { name: 'Инцидент дня' });
+    expect(card).toHaveTextContent('Инцидент inc-b');
+    expect(within(card).getByRole('link', { name: 'Чинить' })).toHaveAttribute(
+      'href',
+      '/practice/inc-b',
+    );
+    first.unmount();
+
+    practiceList = [item('inc-a', 'solved'), item('inc-d', 'locked')];
+    renderPath('/track/t1');
+    await screen.findByText('СЕЙЧАС');
+    await screen.findByRole('region', { name: 'Повторение' });
+    expect(screen.queryByRole('region', { name: 'Инцидент дня' })).not.toBeInTheDocument();
+  });
+
+  it('a practice node opens its incident once the lesson before it is done', async () => {
+    const withPractice: Catalog = {
+      version: VERSION,
+      tracks: [
+        {
+          ...t1,
+          sections: [
+            {
+              ...t1.sections[0]!,
+              nodes: [
+                ...lessons('t1.s01', 1),
+                {
+                  kind: 'practice',
+                  lessonId: 't1.s01.p-inc-a',
+                  practiceId: 'inc-a',
+                  title: 'Nginx лежит',
+                },
+                ...lessons('t1.s01', 3).slice(1),
+              ],
+            },
+            t1.sections[1]!,
+          ],
+        },
+      ],
+    };
+    server.use(
+      http.get(`*/content/${VERSION}/catalog.json`, () => HttpResponse.json(withPractice)),
+    );
+    renderPath('/track/t1');
+    const node = await screen.findByRole('link', { name: /Nginx лежит/ });
+    expect(node).toHaveAttribute('href', '/practice/inc-a');
   });
 });

@@ -1,5 +1,5 @@
 import { ContentVersionDto, ProgressDto } from '@rootcamp/api-contract';
-import type { Catalog, Section } from '@rootcamp/content-schema';
+import type { Catalog, PracticePublic, Section } from '@rootcamp/content-schema';
 import { type QueryClient, useQueries, useQuery } from '@tanstack/react-query';
 import { ApiClientError, apiFetch } from '../api/client';
 
@@ -75,6 +75,11 @@ export function useSection(sectionId: string | null) {
     `section:${sectionId ?? ''}`,
     sectionId === null ? null : `sections/${sectionId}.json`,
   );
+}
+
+/** `practices/<id>.json`: the public part of a practice manifest (brief, goals, reward). */
+export function usePracticeContent(practiceId: string) {
+  return useVersionFile<PracticePublic>(`practice:${practiceId}`, `practices/${practiceId}.json`);
 }
 
 /**

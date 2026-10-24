@@ -3,7 +3,7 @@
  * later milestones flip their flag.
  */
 export const features = {
-  practice: false,
+  practice: true,
   review: true,
   leaderboard: false,
   profile: false,

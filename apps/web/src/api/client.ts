@@ -9,12 +9,14 @@ export class ApiClientError extends Error {
   readonly retryAfter: number | undefined;
   /** `x-request-id`, quoted on «Что-то сломалось (код …)». */
   readonly reqId: string | undefined;
+  /** The active run a `run_exists` points at. */
+  readonly runId: string | undefined;
 
   constructor(
     status: number,
     code: ErrorCode,
     message: string,
-    extra: { retryAfter?: number; reqId?: string } = {},
+    extra: { retryAfter?: number; reqId?: string; runId?: string } = {},
   ) {
     super(message);
     this.name = 'ApiClientError';
@@ -22,6 +24,7 @@ export class ApiClientError extends Error {
     this.code = code;
     this.retryAfter = extra.retryAfter;
     this.reqId = extra.reqId;
+    this.runId = extra.runId;
   }
 }
 
@@ -52,8 +55,8 @@ async function toError(res: Response): Promise<ApiClientError> {
   const retryAfter = Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : undefined;
   const parsed = ApiError.safeParse(await res.json().catch(() => null));
   if (parsed.success) {
-    const { code, message } = parsed.data.error;
-    return new ApiClientError(res.status, code, message, { retryAfter, reqId });
+    const { code, message, runId } = parsed.data.error;
+    return new ApiClientError(res.status, code, message, { retryAfter, reqId, runId });
   }
   return new ApiClientError(res.status, 'internal', `HTTP ${res.status}`, { retryAfter, reqId });
 }

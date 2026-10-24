@@ -13,6 +13,8 @@ import { Reset } from './screens/auth/Reset';
 import { Verify } from './screens/auth/Verify';
 import { LessonScreen } from './screens/Lesson/LessonScreen';
 import { PathIndex, PathScreen } from './screens/Path/PathScreen';
+import { PracticeCatalog } from './screens/Practice/PracticeCatalog';
+import { PracticeScreen } from './screens/Practice/PracticeScreen';
 import { ReviewScreen } from './screens/Review/ReviewScreen';
 
 const queryClient = new QueryClient({
@@ -54,6 +56,14 @@ export function App() {
             <Route
               path="/review"
               element={<RequireUser>{(me) => <ReviewScreen me={me} />}</RequireUser>}
+            />
+            <Route
+              path="/practice"
+              element={<RequireUser>{(me) => <PracticeCatalog me={me} />}</RequireUser>}
+            />
+            <Route
+              path="/practice/:practiceId"
+              element={<RequireUser>{(me) => <PracticeScreen me={me} />}</RequireUser>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

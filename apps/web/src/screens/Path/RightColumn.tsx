@@ -1,12 +1,14 @@
 import type { MeDto } from '@rootcamp/api-contract';
 import { useId } from 'react';
 import { Link } from 'react-router-dom';
+import { usePractices } from '../../api/practice';
+import { features } from '../../config';
 import { ProgressBar } from '../../player/ProgressBar';
 import styles from './Path.module.css';
 
 /**
  * Right column of the path (≥ 1280 px; under the main column below that): today's goal and
- * the review counter. «Инцидент дня» and «Неделя» join in M4a and M5.
+ * «Инцидент дня» and the review counter. «Неделя» joins in M5.
  */
 export function RightColumn({ me, dueCount }: { me: MeDto; dueCount: number | undefined }) {
   const goalId = useId();
@@ -25,6 +27,8 @@ export function RightColumn({ me, dueCount }: { me: MeDto; dueCount: number | un
           {me.xpToday >= me.dailyGoal ? 'Цель дня выполнена' : 'XP за сегодня'}
         </p>
       </section>
+
+      {features.practice && <IncidentOfDay />}
 
       <section className={styles.card} aria-labelledby={reviewId}>
         <h2 id={reviewId} className={styles.cardTitle}>
@@ -46,5 +50,27 @@ export function RightColumn({ me, dueCount }: { me: MeDto; dueCount: number | un
         </Link>
       </section>
     </div>
+  );
+}
+
+/**
+ * «Инцидент дня»: the first available practice not solved yet (§8.1). Hidden while there is
+ * none (no practices in the content, all solved or locked) or the list did not load.
+ */
+function IncidentOfDay() {
+  const id = useId();
+  const practices = usePractices();
+  const next = practices.data?.find((p) => p.status === 'available');
+  if (!next) return null;
+  return (
+    <section className={styles.card} aria-labelledby={id}>
+      <h2 id={id} className={styles.cardTitle}>
+        Инцидент дня
+      </h2>
+      <p className={styles.cardText}>{next.title}</p>
+      <Link to={`/practice/${next.id}`} className={`btn ${styles.cardButton}`}>
+        Чинить
+      </Link>
+    </section>
   );
 }
