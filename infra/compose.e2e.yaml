@@ -1,4 +1,5 @@
-# E2E overlay (spec §10.4): images built from sources, Mailpit, Caddy on :8081 without TLS.
+# E2E overlay (spec §10.4): images built from sources, Mailpit, Caddy on :8081 without TLS,
+# sandboxd with the runc-dev driver (dev/e2e only, never on a production stand: R-M4a-3).
 # Always used on top of compose.yaml under its own project name, so it never touches the dev
 # stand (8080/8025/5432) — `pnpm e2e` runs:
 #   docker compose -p rootcamp-e2e --env-file infra/versions.env \
@@ -10,6 +11,11 @@
 # Rate limits are the production ones except `register` (R-M3-5): every scenario registers its
 # own user, 5 per Playwright project and 10 per run from one IP. `down -v` + a fresh api
 # process reset the in-memory counters between runs.
+# Content = content/ + e2e/fixtures/content (CONTENT_EXTRA, same for api and web so the hashes
+# match): the fixture practice inc-e2e-touch after t1.s01.l01 and its image rc/test-shell.
+# Sandboxes: sandboxd talks to the host daemon (docker.sock, the only service with it) and starts
+# rc/test-shell containers labelled rootcamp.instance=rootcamp-e2e on the network rc-sbx-dev.
+# They are not compose containers: e2e/run.mjs removes whatever is left after `down`.
 name: rootcamp-e2e
 
 services:
@@ -25,8 +31,10 @@ services:
       dockerfile: apps/api/Dockerfile
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        CONTENT_EXTRA: e2e/fixtures/content
     environment:
       DATABASE_URL: postgres://rootcamp:rootcamp-e2e@postgres:5432/rootcamp
+      SANDBOXD_URL: http://sandboxd:3001
       # CSRF compares Origin with this verbatim; Playwright's baseURL is the same string.
       PUBLIC_ORIGIN: http://127.0.0.1:8081
       NODE_ENV: test
@@ -44,6 +52,54 @@ services:
         condition: service_healthy
       content-init:
         condition: service_completed_successfully
+      sandboxd:
+        condition: service_healthy
+
+  # Spec §10.4: runc-dev (allowed only with NODE_ENV≠production) swaps every practice image for
+  # rc/test-shell. SANDBOXD_INSTANCE must differ from every other sandboxd on this daemon: its GC
+  # and reconcile only see (and remove) containers with its own value.
+  sandboxd:
+    image: rootcamp/sandboxd:e2e
+    build:
+      context: ..
+      dockerfile: apps/sandboxd/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+    environment:
+      DATABASE_URL: postgres://rootcamp:rootcamp-e2e@postgres:5432/rootcamp
+      INTERNAL_TOKEN: e2e-internal-token-not-secret
+      TICKET_SECRET: e2e-ticket-secret-not-secret-0123456789
+      NODE_ENV: test
+      SANDBOX_DRIVER: runc-dev
+      SANDBOXD_INSTANCE: rootcamp-e2e
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [rc-internal]
+    depends_on:
+      # Its tables come from the api's migrations.
+      content-init:
+        condition: service_completed_successfully
+      test-shell:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3001/healthz']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    restart: 'no'
+
+  # One-shot that only builds and tags rc/test-shell (sandbox/images/test-shell, context
+  # sandbox/images) on `up --build`, so the image exists before sandboxd starts a sandbox.
+  test-shell:
+    image: rc/test-shell
+    build:
+      context: ../sandbox/images
+      dockerfile: test-shell/Dockerfile
+    entrypoint: ['true']
+    command: []
+    network_mode: none
+    restart: 'no'
 
   # One-shot, on the api image (built by `api`, so never pulled): the api's migrations (the
   # `settings` table must exist), then `content:activate` of the version baked into the image
@@ -75,8 +131,10 @@ services:
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
         CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.10-alpine}
+        CONTENT_EXTRA: e2e/fixtures/content
     volumes:
-      # Same site config as dev: plain http on :8080 inside the container.
+      # Same site config as dev: plain http on :8080 inside the container (it also proxies
+      # /ws/terminal to sandboxd).
       - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
     ports:
       - '127.0.0.1:8081:8080'

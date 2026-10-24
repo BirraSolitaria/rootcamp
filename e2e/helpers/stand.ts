@@ -36,6 +36,23 @@ export function psql(script: string, vars: Record<string, string> = {}): string 
 }
 
 /**
+ * `dev:seed-progress` in the stand's api container (NODE_ENV=test there): marks `lessonIds`
+ * completed for `email` without playing them, e.g. to unlock the practice after t1.s01.l01.
+ */
+export function seedProgress(email: string, lessonIds: string[]): void {
+  const args = [...COMPOSE, 'exec', '-T', 'api', 'node', 'dist/cli.js', 'dev:seed-progress'];
+  args.push(email, ...lessonIds);
+  const r = spawnSync('docker', args, {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+  });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`dev:seed-progress failed (${r.status}): ${r.stderr}`);
+}
+
+/**
  * «A day has passed» for the review boxes of `nick`: every due date moves one day back.
  * The server's clock is its own (`page.clock` only moves the browser's), so the e2e shifts the
  * stored dates instead. Returns how many items moved.

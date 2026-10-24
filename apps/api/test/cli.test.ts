@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { auditLog, settings, users } from '@rootcamp/db';
+import { auditLog, lessonCompletions, settings, users, xpEvents } from '@rootcamp/db';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli.js';
@@ -106,5 +106,68 @@ describe('rootcamp-cli sandboxes:drain / sandboxes:undrain', () => {
     const audit = await db.select().from(auditLog).orderBy(auditLog.id);
     expect(audit.map((a) => a.action)).toEqual(['sandboxes.drain', 'sandboxes.undrain']);
     expect(audit.every((a) => a.actorId === null)).toBe(true);
+  });
+});
+
+describe('rootcamp-cli dev:seed-progress', () => {
+  it('marks the lessons completed (0 mistakes), keeps existing rows, no XP', async () => {
+    const { db } = h();
+    const [ann] = await db.insert(users).values(baseUser).returning();
+    await db
+      .insert(lessonCompletions)
+      .values({ userId: ann!.id, lessonId: 't1.s01.l02', bestMistakes: 3, times: 2 });
+    const c = capture();
+
+    const code = await runCli(['dev:seed-progress', 'Ann@x.ru', 't1.s01.l01', 't1.s01.l02'], {
+      db,
+      nodeEnv: 'test',
+      ...c.io,
+    });
+
+    expect(code).toBe(0);
+    expect(c.out.join('\n')).toMatch(/seeded 2/);
+    const rows = await db
+      .select()
+      .from(lessonCompletions)
+      .where(eq(lessonCompletions.userId, ann!.id))
+      .orderBy(lessonCompletions.lessonId);
+    expect(rows.map((r) => [r.lessonId, r.bestMistakes, r.times])).toEqual([
+      ['t1.s01.l01', 0, 1],
+      ['t1.s01.l02', 3, 2],
+    ]);
+    expect(await db.select().from(xpEvents)).toEqual([]);
+  });
+
+  it.each([['production'], [undefined]])(
+    'NODE_ENV=%s: refused with exit 1, nothing written',
+    async (nodeEnv) => {
+      const { db } = h();
+      await db.insert(users).values(baseUser);
+      const c = capture();
+
+      const code = await runCli(['dev:seed-progress', 'ann@x.ru', 't1.s01.l01'], {
+        db,
+        nodeEnv,
+        ...c.io,
+      });
+
+      expect(code).toBe(1);
+      expect(c.err.join('\n')).toMatch(/refused with NODE_ENV/);
+      expect(await db.select().from(lessonCompletions)).toEqual([]);
+    },
+  );
+
+  it('unknown email or a malformed lesson id: exit 1, nothing written', async () => {
+    const { db } = h();
+    await db.insert(users).values(baseUser);
+    const c = capture();
+    const run = (args: string[]) =>
+      runCli(['dev:seed-progress', ...args], { db, nodeEnv: 'development', ...c.io });
+
+    expect(await run(['nobody@x.ru', 't1.s01.l01'])).toBe(1);
+    expect(await run(['ann@x.ru', 't1.s01'])).toBe(1);
+    expect(c.err.join('\n')).toMatch(/no user with email nobody@x\.ru/);
+    expect(c.err.join('\n')).toMatch(/not a lesson id: t1\.s01/);
+    expect(await db.select().from(lessonCompletions)).toEqual([]);
   });
 });

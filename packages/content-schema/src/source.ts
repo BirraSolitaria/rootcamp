@@ -90,6 +90,17 @@ export const ImageRegistrySchema = z.strictObject({
 });
 export type ImageRegistry = z.infer<typeof ImageRegistrySchema>;
 
+/**
+ * `<extra root>/overlays/<sectionId>.yaml` (e2e fixtures only): put a practice node into a
+ * section of the main content right after its node `insertAfter` (a lesson or practice name as
+ * written in section.yaml, e.g. `l01`).
+ */
+export const SectionOverlaySchema = z.strictObject({
+  insertAfter: z.string(),
+  practice: z.string(),
+});
+export type SectionOverlay = z.infer<typeof SectionOverlaySchema>;
+
 /** content/removed-ids.yaml */
 export const RemovedIdsSchema = z.strictObject({ ids: z.array(z.string()) });
 

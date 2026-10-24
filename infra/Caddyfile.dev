@@ -10,6 +10,13 @@
 		reverse_proxy api:3000
 	}
 
+	# Practice terminal (spec §5.2): the api hands out a relative `/ws/terminal?ticket=…`, so the
+	# WebSocket stays on the site's origin; reverse_proxy passes the Upgrade through. Only stands
+	# with a sandboxd service (e2e) answer it; elsewhere the upstream does not resolve → 502.
+	handle /ws/terminal {
+		reverse_proxy sandboxd:3001
+	}
+
 	# Course content baked into the web image (apps/web/Dockerfile): /content/<hash>/... is
 	# /content-dist/public/<hash>/.... A version's files never change, so found files are cached
 	# for a year; misses and directories are not. The server part is not in this image at all.

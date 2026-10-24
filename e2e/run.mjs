@@ -10,7 +10,12 @@
 //     -v "$PWD":"$PWD" -w "$PWD" -e CI=1 mcr.microsoft.com/playwright:v1.64.0-noble \
 //     bash -lc 'corepack enable && pnpm install --frozen-lockfile --ignore-scripts && pnpm e2e'
 // The repo must sit at the same path inside as on the host: the host daemon resolves the
-// overlay's bind mounts (Caddyfile.dev). The specs also `docker compose exec` into Postgres.
+// overlay's bind mounts (Caddyfile.dev). The specs also `docker compose exec` into Postgres
+// and the api (dev:seed-progress).
+// Sandboxes (scenario 5): `up --build` also builds rc/test-shell (the one-shot `test-shell`
+// service); sandboxd starts its containers on the host daemon with the label
+// rootcamp.instance=rootcamp-e2e. They are not part of the compose project, so after `down` this
+// script removes every container left with that label (and prints how many).
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +33,20 @@ const compose = [
   '-f',
   'infra/compose.e2e.yaml',
 ];
+
+const SANDBOX_FILTER = 'label=rootcamp.instance=rootcamp-e2e';
+
+/** Removes the e2e sandboxes sandboxd left behind (it is already down, so nothing new appears). */
+function removeSandboxes() {
+  const ls = spawnSync('docker', ['ps', '-aq', '--filter', SANDBOX_FILTER], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+  const ids = (ls.stdout ?? '').split(/\s+/).filter(Boolean);
+  console.log(`\nleft-over e2e sandboxes: ${ids.length}`);
+  if (ids.length > 0) run('docker', ['rm', '-f', '-v', ...ids], root);
+}
 
 function run(cmd, args, cwd) {
   console.log(`\n$ ${cmd} ${args.join(' ')}`);
@@ -54,6 +73,7 @@ try {
     console.log('\nE2E_KEEP_STAND=1: the stand stays up (tear down with `down -v`).');
   } else {
     run('docker', [...compose, 'down', '-v', '--remove-orphans'], root);
+    removeSandboxes();
   }
 }
 process.exit(code);

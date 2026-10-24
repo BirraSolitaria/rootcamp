@@ -20,7 +20,9 @@ COPY . .
 RUN pnpm install --offline --frozen-lockfile --ignore-scripts --filter @rootcamp/web... --filter content-build...
 RUN pnpm --filter @rootcamp/web build
 # Same sources as the api image → same hash; only the public part goes into this image.
-RUN pnpm content:build
+# CONTENT_EXTRA: as in apps/api/Dockerfile (e2e fixtures; same value for both images).
+ARG CONTENT_EXTRA=
+RUN pnpm content:build ${CONTENT_EXTRA:+--extra "$CONTENT_EXTRA"}
 
 FROM ${CADDY_IMAGE} AS runtime
 COPY --from=build /repo/apps/web/dist /srv

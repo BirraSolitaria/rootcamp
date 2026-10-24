@@ -3,13 +3,17 @@
 //   docker compose exec api node dist/cli.js content:list
 //   docker compose exec api node dist/cli.js content:activate <hash>
 //   docker compose exec api node dist/cli.js sandboxes:drain    (before maintenance, spec §11.5)
+//   docker compose exec api node dist/cli.js dev:seed-progress ann@mail.ru t1.s01.l01
+//                                            (dev/e2e stands only: refused unless NODE_ENV is
+//                                            development or test)
 // Needs DATABASE_URL and, for content:*, CONTENT_DIR (the api container has both).
 import { randomBytes } from 'node:crypto';
 import { cp, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditLog, createDb, users, type Db } from '@rootcamp/db';
+import { ID_RE } from '@rootcamp/content-schema';
+import { auditLog, createDb, lessonCompletions, users, type Db } from '@rootcamp/db';
 import { Command, CommanderError } from 'commander';
 import { sql } from 'drizzle-orm';
 import {
@@ -24,6 +28,8 @@ export interface CliDeps {
   db: Db;
   /** content-dist root (`CONTENT_DIR`) holding `server/<hash>/` and `public/<hash>/`. */
   contentDir?: string;
+  /** `NODE_ENV`; unset counts as production (as in the api config). Gates the `dev:*` commands. */
+  nodeEnv?: string;
   out(line: string): void;
   err(line: string): void;
 }
@@ -181,6 +187,36 @@ async function sandboxesDrain(db: Db, drained: boolean): Promise<string> {
     : 'sandboxes undrained: new sandboxes start again';
 }
 
+/**
+ * Marks `lessonIds` completed for the user with `email` (`lesson_completions`, 0 mistakes; rows
+ * that exist are kept), so a dev or e2e stand can open what those lessons unlock without playing
+ * them. No XP, streak or review items. Only with NODE_ENV development or test.
+ */
+async function seedProgress(
+  db: Db,
+  nodeEnv: string | undefined,
+  email: string,
+  lessonIds: string[],
+): Promise<string> {
+  if (nodeEnv !== 'development' && nodeEnv !== 'test') {
+    throw new CliFailure(
+      `dev:seed-progress is refused with NODE_ENV=${nodeEnv ?? '(unset: production)'}`,
+    );
+  }
+  const bad = lessonIds.filter((id) => !ID_RE.lesson.test(id));
+  if (bad.length > 0) throw new CliFailure(`not a lesson id: ${bad.join(', ')}`);
+  const [user] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(sql`${users.email} = ${email}`);
+  if (!user) throw new CliFailure(`no user with email ${email}`);
+  await db
+    .insert(lessonCompletions)
+    .values(lessonIds.map((lessonId) => ({ userId: user.id, lessonId, bestMistakes: 0 })))
+    .onConflictDoNothing();
+  return `seeded ${lessonIds.length} completed lesson(s) for ${user.email}`;
+}
+
 function buildProgram(deps: CliDeps): Command {
   const program = new Command('rootcamp-cli')
     .description('rootcamp operator commands')
@@ -228,6 +264,14 @@ function buildProgram(deps: CliDeps): Command {
     .action(async () => {
       deps.out(await sandboxesDrain(deps.db, false));
     });
+  program
+    .command('dev:seed-progress')
+    .description('dev/e2e only: mark lessons completed for a user (refused in production)')
+    .argument('<email>', 'account email')
+    .argument('<lessonIds...>', 'lesson ids, e.g. t1.s01.l01')
+    .action(async (email: string, lessonIds: string[]) => {
+      deps.out(await seedProgress(deps.db, deps.nodeEnv, email, lessonIds));
+    });
   return program;
 }
 
@@ -258,6 +302,7 @@ async function main(): Promise<number> {
     return await runCli(process.argv.slice(2), {
       db: handle.db,
       contentDir: process.env.CONTENT_DIR?.trim() || undefined,
+      nodeEnv: process.env.NODE_ENV?.trim() || undefined,
       out: (s) => console.log(s),
       err: (s) => console.error(s),
     });

@@ -8,6 +8,7 @@ import {
   PracticeManifestSchema,
   PublishedIdsSchema,
   RemovedIdsSchema,
+  SectionOverlaySchema,
   SectionSrcSchema,
   TrackSrcSchema,
   type ImageRegistry,
@@ -52,7 +53,11 @@ export interface ContentTree {
 }
 
 export interface LoadOptions {
-  /** Extra directories with `practices/` and `images/registry.yaml` (both optional there). */
+  /**
+   * Extra directories (e2e fixtures) with `practices/`, `images/registry.yaml` and
+   * `overlays/<sectionId>.yaml` (all optional there). An overlay inserts a practice node into a
+   * section of `root` (see `SectionOverlaySchema`).
+   */
   extraRoots?: string[];
 }
 
@@ -83,6 +88,7 @@ export async function loadContentTree(root: string, opts: LoadOptions = {}): Pro
         ...((await ctx.loadFile(extraRegistry, ImageRegistrySchema))?.images ?? []),
       );
     }
+    await ctx.applyOverlays(join(extra, 'overlays'), tracks);
   }
 
   return {
@@ -166,6 +172,33 @@ class Loader {
     return { file: this.rel(sectionFile), src, lessons };
   }
 
+  /**
+   * Applies every `<dir>/<sectionId>.yaml` (sorted by name) to the loaded sections; a missing
+   * `dir` means none. An unknown section or anchor node is an R7 error and changes nothing.
+   */
+  async applyOverlays(dir: string, tracks: LoadedTrack[]): Promise<void> {
+    for (const name of (await listFileNames(dir)) ?? []) {
+      if (!name.endsWith('.yaml')) continue;
+      const file = join(dir, name);
+      const overlay = await this.loadFile(file, SectionOverlaySchema);
+      if (!overlay) continue;
+      const sectionId = name.slice(0, -'.yaml'.length);
+      const section = tracks.flatMap((t) => t.sections).find((s) => s.src.id === sectionId);
+      if (!section) {
+        this.fail(file, `overlay: section '${sectionId}' not found`);
+        continue;
+      }
+      const at = section.src.nodes.findIndex((n) =>
+        'lesson' in n ? n.lesson === overlay.insertAfter : n.practice === overlay.insertAfter,
+      );
+      if (at < 0) {
+        this.fail(file, `overlay: node '${overlay.insertAfter}' not found in ${sectionId}`);
+        continue;
+      }
+      section.src.nodes.splice(at + 1, 0, { practice: overlay.practice });
+    }
+  }
+
   /** Loads every `<dir>/<name>/practice.yaml`; a missing `dir` means no practices. */
   async loadPractices(dir: string): Promise<LoadedPractice[]> {
     const practices: LoadedPractice[] = [];
@@ -205,6 +238,19 @@ async function listDirs(dir: string): Promise<string[] | undefined> {
     const entries = await readdir(dir, { withFileTypes: true });
     return entries
       .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Sorted file names directly in `dir`; undefined if `dir` does not exist or cannot be read. */
+async function listFileNames(dir: string): Promise<string[] | undefined> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile())
       .map((e) => e.name)
       .sort();
   } catch {

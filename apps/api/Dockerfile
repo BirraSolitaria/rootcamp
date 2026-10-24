@@ -23,7 +23,10 @@ RUN pnpm --filter @rootcamp/api deploy --prod --ignore-scripts /out
 # Course content (R-M3-3): tools/content-build writes content-dist/{public,server}/<hash>/ and
 # prints `version <hash>`. The api image carries only server/ (full manifests, practice
 # scripts); the web image builds the same sources into the same hash and carries only public/.
-RUN pnpm content:build
+# CONTENT_EXTRA (e2e only, infra/compose.e2e.yaml): one more content root for `--extra`, e.g.
+# e2e/fixtures/content; the web image must get the same value or the hashes differ.
+ARG CONTENT_EXTRA=
+RUN pnpm content:build ${CONTENT_EXTRA:+--extra "$CONTENT_EXTRA"}
 
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \

@@ -1,5 +1,4 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   checkAndContinue,
   currentTask,
@@ -8,21 +7,8 @@ import {
   taskArea,
   type TaskType,
 } from '../helpers/answers';
+import { seriousViolations } from '../helpers/axe';
 import { registerAndVerify, uniqueNick } from '../helpers/users';
-
-/** axe violations of impact `serious` or `critical`, as short readable lines. */
-async function seriousViolations(page: Page): Promise<string[]> {
-  const { violations } = await new AxeBuilder({ page }).analyze();
-  return violations
-    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-    .map(
-      (v) =>
-        `${v.impact} ${v.id}: ${v.help} — ${v.nodes
-          .slice(0, 5)
-          .map((n) => n.target.join(' '))
-          .join(' | ')}`,
-    );
-}
 
 // Spec §10.4: «Путь» and «Урок» without serious/critical axe violations. The lesson is checked
 // on the theory card, on the first task of each type (before and after «Проверить», one answer

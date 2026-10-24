@@ -1,0 +1,22 @@
+# E2E fixture (spec §10.4, scenario 5): built into the e2e stand only, with
+# `content-build --extra e2e/fixtures/content`; never part of content/.
+id: inc-e2e-touch
+title: 'E2E: создай файл-флажок'
+track: t1
+brief: |
+  Тестовый инцидент для e2e-сценария. Мониторинг ждёт файл-флажок /tmp/done, а его на сервере
+  нет. Создай этот файл в терминале и нажми «Проверить».
+image: rc/test-shell
+class: light
+hostname: e2e-touch
+timeoutMin: 15
+setupTimeoutSec: 30
+goals:
+  - id: done
+    title: Файл /tmp/done существует
+    check: check/done.sh
+    timeoutSec: 5
+hints:
+  - 'Пустой файл создаёт команда touch'
+reward: { base: 20, noHintBonus: 10, hintCost: 5 }
+solution: solution.sh

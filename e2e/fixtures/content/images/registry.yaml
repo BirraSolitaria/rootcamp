@@ -1,0 +1,7 @@
+# E2E fixture: the image of inc-e2e-touch (sandbox/images/test-shell, class light, spec §6.5).
+images:
+  - ref: rc/test-shell
+    class: light
+    cpu: 0.5
+    memMb: 512
+    pids: 512
