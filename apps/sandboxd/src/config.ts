@@ -51,6 +51,18 @@ const EnvSchema = z.object({
   TICKET_SECRET: secret,
   SANDBOX_DRIVER: z.preprocess(blankToUndefined, SandboxDriverName.default('sysbox')),
   SANDBOX_NETWORK: optional,
+  /**
+   * Owner of the sandboxes on a shared dockerd (label `rootcamp.instance`). Every sandboxd on
+   * one daemon (live stand, e2e stand, dev) MUST use a distinct value: each one's GC, reconcile
+   * and event watcher see only containers carrying its own value.
+   */
+  SANDBOXD_INSTANCE: z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9_.-]{0,62}$/, 'must be 1-63 chars of a-z 0-9 _ . -')
+      .default('default'),
+  ),
   /** Admission budget (spec §6.5). */
   BUDGET_MEM_MB: int(5120, 1),
   BUDGET_CPU: positiveNumber(3.5),
@@ -81,6 +93,8 @@ export interface Config {
   ticketSecret: string;
   driver: SandboxDriverName;
   network: string;
+  /** `SANDBOXD_INSTANCE`: value of the `rootcamp.instance` label on this sandboxd's containers. */
+  instance: string;
   /** Matches the scheduler's `Budget`. */
   budget: { memMb: number; cpu: number; heavySlots: number };
   queueMax: number;
@@ -107,6 +121,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     ticketSecret: e.TICKET_SECRET,
     driver: e.SANDBOX_DRIVER,
     network: e.SANDBOX_NETWORK ?? DEFAULT_NETWORK[e.SANDBOX_DRIVER],
+    instance: e.SANDBOXD_INSTANCE,
     budget: { memMb: e.BUDGET_MEM_MB, cpu: e.BUDGET_CPU, heavySlots: e.HEAVY_SLOTS },
     queueMax: e.QUEUE_MAX,
     hostProc: e.HOST_PROC,

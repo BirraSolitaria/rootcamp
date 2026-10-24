@@ -41,7 +41,11 @@ describe.runIf(dockerAvailable)('lifecycle and internal API (runc-dev, real Post
   let h: DbHandle;
   let app: FastifyInstance;
   let lifecycle: Lifecycle;
-  const driver = new RuncDevDriver({ docker, network: 'rc-sbx-dev' });
+  const driver = new RuncDevDriver({
+    docker,
+    network: 'rc-sbx-dev',
+    instance: `test-${randomUUID().slice(0, 8)}`,
+  });
 
   async function newUser(): Promise<string> {
     const nick = `u${randomUUID().slice(0, 8)}`;

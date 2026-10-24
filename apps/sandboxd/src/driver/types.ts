@@ -2,6 +2,11 @@ import type { SandboxClass } from '@rootcamp/api-contract';
 
 /** Every sandbox container carries `rootcamp.sandbox=<sandboxId>`; GC and tests select by it. */
 export const SANDBOX_LABEL = 'rootcamp.sandbox';
+/**
+ * `rootcamp.instance=<SANDBOXD_INSTANCE>`: which sandboxd owns the container. A driver only
+ * lists, watches and therefore collects containers of its own instance.
+ */
+export const INSTANCE_LABEL = 'rootcamp.instance';
 /** `rootcamp.user=<userId>`; absent on test sandboxes (no user). */
 export const USER_LABEL = 'rootcamp.user';
 
@@ -87,9 +92,9 @@ export interface SandboxDriver {
   stopAndRemove(id: string): Promise<void>;
   /** Disk used by the sandbox, MiB. */
   diskUsageMb(id: string): Promise<number>;
-  /** Every container with the `rootcamp.sandbox` label, running or not. */
+  /** Every container of this instance with the `rootcamp.sandbox` label, running or not. */
   listManaged(): Promise<ManagedContainer[]>;
-  /** Streams `die` / `oom` of labelled containers; resolves with a function that stops it. */
+  /** Streams `die` / `oom` of this instance's labelled containers; resolves with a function that stops it. */
   watchEvents(o: WatchEventsOptions): Promise<() => void>;
   /** State of a container; null when it no longer exists. */
   containerState(id: string): Promise<ContainerState | null>;

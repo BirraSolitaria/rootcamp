@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Docker from 'dockerode';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { RuncDevDriver } from '../src/driver/runc-dev.js';
-import { CLASS_LIMITS, SANDBOX_LABEL, USER_LABEL } from '../src/driver/types.js';
+import { CLASS_LIMITS, INSTANCE_LABEL, SANDBOX_LABEL, USER_LABEL } from '../src/driver/types.js';
 
 const docker = new Docker();
 const dockerAvailable = await docker.ping().then(
@@ -25,7 +25,8 @@ async function sweep(ids: string[]): Promise<void> {
 }
 
 describe.runIf(dockerAvailable)('runc-dev driver (real dockerd)', () => {
-  const driver = new RuncDevDriver({ docker, network: NETWORK });
+  const instance = `test-${randomUUID().slice(0, 8)}`;
+  const driver = new RuncDevDriver({ docker, network: NETWORK, instance });
   const sandboxId = randomUUID();
   const userId = randomUUID();
   const created: string[] = [sandboxId];
@@ -142,6 +143,14 @@ describe.runIf(dockerAvailable)('runc-dev driver (real dockerd)', () => {
     const managed = await driver.listManaged();
     expect(managed).toContainEqual({ containerId, sandboxId, running: true });
     expect(await driver.diskUsageMb(containerId)).toBeGreaterThanOrEqual(0);
+  });
+
+  test('containers carry the instance label; another instance never lists them', async () => {
+    const info = await docker.getContainer(containerId).inspect();
+    expect(info.Config.Labels[INSTANCE_LABEL]).toBe(instance);
+    const other = new RuncDevDriver({ docker, network: NETWORK, instance: `${instance}-x` });
+    expect((await other.listManaged()).map((c) => c.containerId)).not.toContain(containerId);
+    expect((await driver.listManaged()).every((c) => c.containerId !== '')).toBe(true);
   });
 
   test('a sandbox without a user has no rootcamp.user label; stopAndRemove is idempotent', async () => {

@@ -234,3 +234,24 @@ describe('GET /internal/metrics', () => {
     }
   });
 });
+
+describe('Metrics call timeouts', () => {
+  test('a hung docker stats call is dropped; the poll still completes', async () => {
+    const m = new Metrics({
+      driver: { stats: () => new Promise<never>(() => {}) },
+      listReady: async () => [
+        { sandboxId: '00000000-0000-4000-8000-000000000001', containerId: 'c1' },
+      ],
+      hostProc: '/proc',
+      hostRoot: '/',
+      readFile: async (p: string) => (p.endsWith('meminfo') ? MEMINFO : STAT_A),
+      statfs: async () => ({ blocks: 262144, bfree: 131072, bavail: 131072, bsize: 4096 }),
+      callTimeoutMs: 50,
+    });
+    const t0 = Date.now();
+    await m.poll();
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(m.snapshot().sandboxes).toEqual([]);
+    expect(m.snapshot().host.memTotalMb).toBe(7860);
+  });
+});

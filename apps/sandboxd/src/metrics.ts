@@ -7,6 +7,7 @@ import type {
   SandboxUsageDto,
 } from '@rootcamp/api-contract';
 import type { ContainerStats } from './driver/types.js';
+import { CALL_TIMEOUT_MS, withTimeout } from './timeout.js';
 
 /** Spec §11.4: a poll every 10 s, the last 60 points kept in memory. */
 export const METRICS_INTERVAL_MS = 10_000;
@@ -119,6 +120,8 @@ export interface MetricsDeps {
   readFile?: (path: string) => Promise<string>;
   statfs?: (path: string) => Promise<StatfsLike>;
   log?: Log;
+  /** Limit per stats / statfs / DB call (default `CALL_TIMEOUT_MS`, 20 s). */
+  callTimeoutMs?: number;
 }
 
 const EMPTY_HOST: HostMetricsDto = {
@@ -189,6 +192,11 @@ export class Metrics {
       this.history.splice(0, this.history.length - HISTORY_POINTS);
   }
 
+  /** A hung dockerd / filesystem call must not stall the poll (it is not reentrant). */
+  private limit<T>(p: Promise<T>, what: string): Promise<T> {
+    return withTimeout(p, this.deps.callTimeoutMs ?? CALL_TIMEOUT_MS, what);
+  }
+
   private async procFile(name: string): Promise<string> {
     try {
       return await this.readFile(`${this.deps.hostProc}/${name}`);
@@ -201,7 +209,9 @@ export class Metrics {
     const [stat, meminfo, fs] = await Promise.all([
       this.procFile('stat'),
       this.procFile('meminfo'),
-      this.statfs(this.deps.hostRoot).catch(() => this.statfs('/')),
+      this.limit(this.statfs(this.deps.hostRoot), 'statfs').catch(() =>
+        this.limit(this.statfs('/'), 'statfs'),
+      ),
     ]);
     const cpu = parseProcStat(stat);
     const cpuPct = this.prevCpu ? cpuPctBetween(this.prevCpu, cpu) : 0;
@@ -217,12 +227,12 @@ export class Metrics {
   }
 
   private async pollSandboxes(): Promise<Map<string, ContainerStats>> {
-    const ready = await this.deps.listReady();
+    const ready = await this.limit(this.deps.listReady(), 'listReady');
     const out = new Map<string, ContainerStats>();
     await Promise.all(
       ready.map(async (r) => {
         try {
-          out.set(r.sandboxId, await this.deps.driver.stats(r.containerId));
+          out.set(r.sandboxId, await this.limit(this.deps.driver.stats(r.containerId), 'stats'));
         } catch {
           // Stopped or removed meanwhile.
         }

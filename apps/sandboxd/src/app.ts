@@ -22,16 +22,19 @@ const SYSBOX_DNS = ['172.30.0.1'];
 
 /** The driver `SANDBOX_DRIVER` names; dockerode reads DOCKER_HOST or uses /var/run/docker.sock. */
 export function createDriver(
-  cfg: Pick<Config, 'driver' | 'network' | 'hostRoot'>,
+  cfg: Pick<Config, 'driver' | 'network' | 'hostRoot' | 'instance'>,
   docker = new Docker(),
 ): SandboxDriver {
-  if (cfg.driver === 'runc-dev') return new RuncDevDriver({ docker, network: cfg.network });
+  if (cfg.driver === 'runc-dev') {
+    return new RuncDevDriver({ docker, network: cfg.network, instance: cfg.instance });
+  }
   return new DockerDriver({
     docker,
     network: cfg.network,
     runtime: 'sysbox-runc',
     dns: SYSBOX_DNS,
     hostRoot: cfg.hostRoot,
+    instance: cfg.instance,
   });
 }
 

@@ -7,7 +7,7 @@ import { createDb, runMigrations, sandboxes, users, type Db, type DbHandle } fro
 import Docker from 'dockerode';
 import { randomUUID } from 'node:crypto';
 import { RuncDevDriver } from '../../src/driver/runc-dev.js';
-import { SANDBOX_LABEL, type ManagedContainer } from '../../src/driver/types.js';
+import { SANDBOX_LABEL } from '../../src/driver/types.js';
 
 export const docker = new Docker();
 export const dockerAvailable = await docker.ping().then(
@@ -35,26 +35,22 @@ export async function startPg(): Promise<Pg> {
   return { pg, h };
 }
 
+/** A fresh `SANDBOXD_INSTANCE` per suite. */
+export const testInstance = () => `test-${randomUUID().slice(0, 8)}`;
+
 /**
- * The daemon is shared with the other suites (vitest runs files in parallel) and the live
- * stand, so this suite's GC / reconcile must only see its own containers: those of a row in
- * its own database, plus the ids it registers in `extra` (orphans it made on purpose).
- * `diskMb` overrides `diskUsageMb` per container id.
+ * The daemon is shared with the other suites (vitest runs files in parallel), e2e stands and
+ * the live stand. Like a real sandboxd, each suite's driver has its own instance label, so its
+ * GC / reconcile / events see only its own containers. `extra` records sandbox ids of
+ * containers a test made without a row (for the final sweep); `diskMb` overrides
+ * `diskUsageMb` per container id.
  */
 export class ScopedDriver extends RuncDevDriver {
   readonly extra = new Set<string>();
   readonly diskMb = new Map<string, number>();
 
-  constructor(private readonly db: Db) {
-    super({ docker, network: 'rc-sbx-dev' });
-  }
-
-  override async listManaged(): Promise<ManagedContainer[]> {
-    const all = await super.listManaged();
-    const ids = new Set(
-      (await this.db.select({ id: sandboxes.id }).from(sandboxes)).map((r) => r.id),
-    );
-    return all.filter((c) => ids.has(c.sandboxId) || this.extra.has(c.sandboxId));
+  constructor(instance = testInstance()) {
+    super({ docker, network: 'rc-sbx-dev', instance });
   }
 
   override diskUsageMb(id: string): Promise<number> {

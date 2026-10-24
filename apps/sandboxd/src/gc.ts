@@ -3,6 +3,7 @@ import { sandboxes, type Db } from '@rootcamp/db';
 import { inArray } from 'drizzle-orm';
 import type { ManagedContainer, SandboxDriver } from './driver/types.js';
 import type { Lifecycle, SandboxRow } from './lifecycle.js';
+import { CALL_TIMEOUT_MS, withTimeout } from './timeout.js';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -47,6 +48,13 @@ export interface GcInput {
   containerRowStates: ReadonlyMap<string, SandboxState>;
   /** Open terminal WebSockets of a sandbox (Task 6). */
   connectionCount: (sandboxId: string) => number;
+  /** The last pass that saw a terminal connected to the sandbox (in-memory). */
+  lastConnectedAt: (sandboxId: string) => number | undefined;
+  /**
+   * Since when this GC has been watching connections (its first pass). Idle time is never
+   * counted from before it: after a restart, terminals get a full 10 min to reconnect.
+   */
+  watchingSince: number;
   /** Disk measured in this pass, MiB (empty on passes that do not measure). */
   diskMb: ReadonlyMap<string, number>;
   /** When the row became `starting`, as far as this process knows. */
@@ -96,8 +104,13 @@ export function gcPlan(i: GcInput): GcPlan {
       plan.stop.push({ id: r.id, reason: 'disk_quota' });
       continue;
     }
-    const last = r.lastActivityAt ?? r.readyAt;
-    if (i.connectionCount(r.id) === 0 && last && i.now - last.getTime() > IDLE_MS) {
+    // Idle runs from the latest of: input / requests, a connected terminal, the GC's start.
+    const last = Math.max(
+      (r.lastActivityAt ?? r.readyAt)?.getTime() ?? 0,
+      i.lastConnectedAt(r.id) ?? 0,
+      i.watchingSince,
+    );
+    if (i.connectionCount(r.id) === 0 && i.now - last > IDLE_MS) {
       plan.stop.push({ id: r.id, reason: 'idle' });
     }
   }
@@ -167,6 +180,8 @@ export interface GcDeps {
   log?: Log;
   /** Default `GC_TICK_MS`. */
   tickMs?: number;
+  /** Limit per driver / lifecycle call (default `CALL_TIMEOUT_MS`, 20 s). */
+  callTimeoutMs?: number;
 }
 
 /**
@@ -181,6 +196,10 @@ export class Gc {
   private connectionCount: (sandboxId: string) => number;
   /** First pass that saw a `starting` row this process is not starting itself. */
   private readonly seenStarting = new Map<string, number>();
+  /** Last pass at which a ready sandbox had a terminal connected. */
+  private readonly lastConnected = new Map<string, number>();
+  /** Time of the first pass. */
+  private watchingSince: number | undefined;
   private lastDiskAt: number | undefined;
   private chain: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
@@ -242,8 +261,14 @@ export class Gc {
     return run;
   }
 
+  /** Bounds a call so a hung dockerd request cannot keep a pass (and `busy`) forever. */
+  private limit<T>(p: Promise<T>, what: string): Promise<T> {
+    return withTimeout(p, this.deps.callTimeoutMs ?? CALL_TIMEOUT_MS, what);
+  }
+
   private async tickOnce(now: number): Promise<GcPlan> {
     const { db, driver, lifecycle } = this.deps;
+    this.watchingSince ??= now;
     const active = (await db
       .select({
         id: sandboxes.id,
@@ -255,7 +280,7 @@ export class Gc {
       })
       .from(sandboxes)
       .where(inArray(sandboxes.state, ['starting', 'ready']))) as GcRow[];
-    const containers = await driver.listManaged();
+    const containers = await this.limit(driver.listManaged(), 'listManaged');
     const named = [...new Set(containers.map((c) => c.sandboxId).filter((s) => UUID_RE.test(s)))];
     const containerRowStates = new Map<string, SandboxState>(
       named.length === 0
@@ -272,6 +297,15 @@ export class Gc {
     for (const id of starting) if (!this.seenStarting.has(id)) this.seenStarting.set(id, now);
     for (const id of this.seenStarting.keys()) if (!starting.has(id)) this.seenStarting.delete(id);
 
+    const conns = new Map<string, number>();
+    for (const r of active) {
+      if (r.state !== 'ready') continue;
+      const n = this.connectionCount(r.id);
+      conns.set(r.id, n);
+      if (n > 0) this.lastConnected.set(r.id, now);
+    }
+    for (const id of this.lastConnected.keys()) if (!conns.has(id)) this.lastConnected.delete(id);
+
     const diskMb = new Map<string, number>();
     if (this.lastDiskAt === undefined || now - this.lastDiskAt >= DISK_CHECK_MS) {
       this.lastDiskAt = now;
@@ -280,7 +314,7 @@ export class Gc {
           .filter((r) => r.state === 'ready' && r.containerId)
           .map(async (r) => {
             try {
-              const mb = await driver.diskUsageMb(r.containerId!);
+              const mb = await this.limit(driver.diskUsageMb(r.containerId!), 'diskUsageMb');
               diskMb.set(r.id, mb);
               this.deps.onDiskUsage?.(r.id, mb);
             } catch {
@@ -295,7 +329,9 @@ export class Gc {
       active,
       containers,
       containerRowStates,
-      connectionCount: (id) => this.connectionCount(id),
+      connectionCount: (id) => conns.get(id) ?? 0,
+      lastConnectedAt: (id) => this.lastConnected.get(id),
+      watchingSince: this.watchingSince,
       diskMb,
       startingSince: (id) => lifecycle.startedAt(id) ?? this.seenStarting.get(id),
     });
@@ -303,34 +339,42 @@ export class Gc {
     const jobs: Promise<unknown>[] = [
       ...plan.stop.map(async ({ id, reason }) => {
         this.log.info({ sandboxId: id, reason }, 'gc: stopping sandbox');
-        await lifecycle.stopSandbox(id, reason);
+        await this.limit(lifecycle.stopSandbox(id, reason), 'stopSandbox');
       }),
       ...plan.failStarting.map((id) =>
-        lifecycle.failSandbox(
-          id,
-          'start_timeout',
-          `the sandbox did not become ready in ${STARTING_TIMEOUT_MS / MINUTE_MS} min`,
-          { from: ['starting'] },
+        this.limit(
+          lifecycle.failSandbox(
+            id,
+            'start_timeout',
+            `the sandbox did not become ready in ${STARTING_TIMEOUT_MS / MINUTE_MS} min`,
+            { from: ['starting'] },
+          ),
+          'failSandbox',
         ),
       ),
       ...plan.dead.map(async (d) => {
         let reason: 'lost' | 'crashed' | 'oom' = d.reason;
         if (d.reason === 'crashed' && d.containerId) {
-          const st = await driver.containerState(d.containerId).catch(() => null);
+          const st = await this.limit(driver.containerState(d.containerId), 'containerState').catch(
+            () => null,
+          );
           if (st?.oomKilled) reason = 'oom';
         }
-        await lifecycle.failSandbox(
-          d.id,
-          reason,
-          d.reason === 'lost'
-            ? 'the sandbox container disappeared'
-            : 'the sandbox container exited',
-          { from: ['ready'], ...(d.containerId ? { containerId: d.containerId } : {}) },
+        await this.limit(
+          lifecycle.failSandbox(
+            d.id,
+            reason,
+            d.reason === 'lost'
+              ? 'the sandbox container disappeared'
+              : 'the sandbox container exited',
+            { from: ['ready'], ...(d.containerId ? { containerId: d.containerId } : {}) },
+          ),
+          'failSandbox',
         );
       }),
       ...plan.orphans.map(async (cid) => {
         this.log.info({ containerId: cid }, 'gc: removing orphan container');
-        await driver.stopAndRemove(cid);
+        await this.limit(driver.stopAndRemove(cid), 'stopAndRemove');
       }),
     ];
     for (const r of await Promise.allSettled(jobs)) {

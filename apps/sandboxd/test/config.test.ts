@@ -16,6 +16,7 @@ describe('loadConfig', () => {
       ticketSecret: env.TICKET_SECRET,
       driver: 'sysbox',
       network: 'rc-sbx',
+      instance: 'default',
       budget: { memMb: 5120, cpu: 3.5, heavySlots: 1 },
       queueMax: 10,
       hostProc: '/host/proc',
@@ -24,6 +25,14 @@ describe('loadConfig', () => {
       port: 3001,
       host: '0.0.0.0',
     });
+  });
+
+  test('SANDBOXD_INSTANCE: a docker-label-safe name, default "default"', () => {
+    expect(loadConfig({ ...env, SANDBOXD_INSTANCE: 'rootcamp-e2e' }).instance).toBe('rootcamp-e2e');
+    expect(loadConfig({ ...env, SANDBOXD_INSTANCE: '' }).instance).toBe('default');
+    expect(() => loadConfig({ ...env, SANDBOXD_INSTANCE: 'Bad Name' })).toThrow(
+      /SANDBOXD_INSTANCE/,
+    );
   });
 
   test('runc-dev defaults to the rc-sbx-dev network', () => {

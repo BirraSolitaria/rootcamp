@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import type Docker from 'dockerode';
 import { usageFromDockerStats } from '../metrics.js';
 import {
+  INSTANCE_LABEL,
   SANDBOX_LABEL,
   USER_LABEL,
   type ContainerEvent,
@@ -41,8 +42,11 @@ export const IMAGE_PRUNE_FILTERS = { dangling: ['true'], 'label!': ['rootcamp.ke
 /** From this API version on, volume prune without `all` spares named volumes. */
 const VOLUME_PRUNE_MIN_API = [1, 42] as const;
 
-/** A `die` / `oom` of a container with the sandbox label, else null. */
-export function parseDockerEvent(raw: unknown): ContainerEvent | null {
+/**
+ * A `die` / `oom` of a container with the sandbox label (and, if `instance` is given, of that
+ * instance), else null.
+ */
+export function parseDockerEvent(raw: unknown, instance?: string): ContainerEvent | null {
   const e = raw as {
     Type?: string;
     Action?: string;
@@ -54,6 +58,7 @@ export function parseDockerEvent(raw: unknown): ContainerEvent | null {
   const sandboxId = e.Actor?.Attributes?.[SANDBOX_LABEL];
   const containerId = e.Actor?.ID;
   if (!sandboxId || !containerId) return null;
+  if (instance !== undefined && e.Actor?.Attributes?.[INSTANCE_LABEL] !== instance) return null;
   const code = Number.parseInt(e.Actor?.Attributes?.exitCode ?? '', 10);
   return {
     action: e.Action,
@@ -128,7 +133,11 @@ export interface DockerDriverOptions {
   dns?: string[];
   /** Host `/` mounted read-only (`HOST_ROOT`): for measuring Sysbox's inner Docker dirs. */
   hostRoot?: string;
+  /** `SANDBOXD_INSTANCE` (label `rootcamp.instance`); default `DEFAULT_INSTANCE`. */
+  instance?: string;
 }
+
+export const DEFAULT_INSTANCE = 'default';
 
 /**
  * The dockerode implementation shared by both drivers. As is, it is the Sysbox driver
@@ -139,10 +148,17 @@ export class DockerDriver implements SandboxDriver {
   readonly name: 'sysbox' | 'runc-dev' = 'sysbox';
   protected readonly docker: Docker;
   protected readonly network: string;
+  readonly instance: string;
 
   constructor(protected readonly opts: DockerDriverOptions) {
     this.docker = opts.docker;
     this.network = opts.network;
+    this.instance = opts.instance ?? DEFAULT_INSTANCE;
+  }
+
+  /** Label filter selecting this instance's sandbox containers. */
+  protected ownLabels(): string[] {
+    return [SANDBOX_LABEL, `${INSTANCE_LABEL}=${this.instance}`];
   }
 
   /** The Sysbox network (subnet, gateway, ICC off) belongs to infra; only check it exists. */
@@ -158,7 +174,10 @@ export class DockerDriver implements SandboxDriver {
   }
 
   async createContainer(s: ContainerSpec): Promise<string> {
-    const labels: Record<string, string> = { [SANDBOX_LABEL]: s.sandboxId };
+    const labels: Record<string, string> = {
+      [SANDBOX_LABEL]: s.sandboxId,
+      [INSTANCE_LABEL]: this.instance,
+    };
     if (s.userId) labels[USER_LABEL] = s.userId;
     const memory = Math.round(s.limits.memMb * MIB);
     const container = await this.docker.createContainer({
@@ -374,7 +393,7 @@ done; exit 0`;
   async listManaged(): Promise<ManagedContainer[]> {
     const list = await this.docker.listContainers({
       all: true,
-      filters: { label: [SANDBOX_LABEL] },
+      filters: { label: this.ownLabels() },
     });
     return list.map((c) => ({
       containerId: c.Id,
@@ -386,7 +405,7 @@ done; exit 0`;
   async watchEvents(o: WatchEventsOptions): Promise<() => void> {
     const stream = (await this.docker.getEvents({
       ...(o.sinceMs === undefined ? {} : { since: Math.floor(o.sinceMs / 1000) }),
-      filters: { type: ['container'], event: ['die', 'oom'], label: [SANDBOX_LABEL] },
+      filters: { type: ['container'], event: ['die', 'oom'], label: this.ownLabels() },
     })) as NodeJS.ReadableStream & { destroy?: () => void };
     let pending = '';
     let done = false;
@@ -409,7 +428,8 @@ done; exit 0`;
         } catch {
           continue;
         }
-        const e = parseDockerEvent(parsed);
+        // The daemon already filters by instance; checked again so a broad filter never leaks.
+        const e = parseDockerEvent(parsed, this.instance);
         if (e) o.onEvent(e);
       }
     });

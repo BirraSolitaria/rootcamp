@@ -75,7 +75,7 @@ describe.runIf(dockerAvailable)('reconcileOnStart (runc-dev, real Postgres)', ()
   beforeAll(async () => {
     pg = await startPg();
     h = pg.h;
-    driver = new ScopedDriver(h.db);
+    driver = new ScopedDriver();
     await driver.ensureNetwork();
     lifecycle = new Lifecycle({
       db: h.db,

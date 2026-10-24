@@ -9,6 +9,8 @@ export interface RuncDevDriverOptions {
   docker: Docker;
   /** Default `rc-sbx-dev`. */
   network?: string;
+  /** `SANDBOXD_INSTANCE`; default `default`. */
+  instance?: string;
 }
 
 /**
@@ -19,7 +21,11 @@ export class RuncDevDriver extends DockerDriver {
   override readonly name = 'runc-dev';
 
   constructor(opts: RuncDevDriverOptions) {
-    super({ docker: opts.docker, network: opts.network ?? 'rc-sbx-dev' });
+    super({
+      docker: opts.docker,
+      network: opts.network ?? 'rc-sbx-dev',
+      ...(opts.instance ? { instance: opts.instance } : {}),
+    });
   }
 
   /** Creates the internal (no route out), ICC-off bridge if it is missing. */

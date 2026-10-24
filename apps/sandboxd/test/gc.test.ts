@@ -61,10 +61,14 @@ function plan(
     conns?: Record<string, number>;
     disk?: [string, number][];
     since?: Record<string, number>;
+    lastConnected?: Record<string, number>;
+    watchingSince?: number;
   } = {},
 ) {
   return gcPlan({
     now: NOW,
+    lastConnectedAt: (sid) => o.lastConnected?.[sid],
+    watchingSince: o.watchingSince ?? NOW - 60 * MIN,
     active,
     containers:
       o.containers ??
@@ -101,6 +105,23 @@ describe('gcPlan (pure)', () => {
     expect(
       plan([ready(1, { lastActivityAt: null, readyAt: new Date(NOW - 11 * MIN) })]).stop,
     ).toEqual([{ id: id(1), reason: 'idle' }]);
+  });
+
+  test('after a restart, idle is counted from the GC start, not from old activity', () => {
+    // Connected for 20 min without typing; sandboxd restarts; terminals not back yet.
+    const r = ready(1, { lastActivityAt: new Date(NOW - 20 * MIN) });
+    expect(plan([r], { watchingSince: NOW - 30_000 }).stop).toEqual([]);
+    expect(plan([r], { watchingSince: NOW - IDLE_MS - 1 }).stop).toEqual([
+      { id: id(1), reason: 'idle' },
+    ]);
+  });
+
+  test('after the tab closes, idle is counted from the last pass that saw it connected', () => {
+    const r = ready(1, { lastActivityAt: new Date(NOW - 30 * MIN) });
+    expect(plan([r], { lastConnected: { [id(1)]: NOW - 9 * MIN } }).stop).toEqual([]);
+    expect(plan([r], { lastConnected: { [id(1)]: NOW - IDLE_MS - 1 } }).stop).toEqual([
+      { id: id(1), reason: 'idle' },
+    ]);
   });
 
   test('disk over 3072 MiB → disk_quota; expiry wins over disk', () => {
@@ -157,6 +178,87 @@ describe('gcPlan (pure)', () => {
       ],
     });
     expect(p.orphans).toEqual(['none', 'bad-label', 'stopped', 'failed']);
+  });
+});
+
+describe('Gc call timeouts', () => {
+  /** Enough of drizzle's select chain for tickOnce: every query answers `rows`. */
+  const fakeDb = (rows: unknown[] = []) =>
+    ({
+      select: () => ({ from: () => ({ where: async () => rows }) }),
+    }) as unknown as DbHandle['db'];
+  const never = () => new Promise<never>(() => {});
+  const lifecycle = {
+    stopSandbox: async () => true,
+    failSandbox: async () => true,
+    startedAt: () => undefined,
+  };
+  const driverWith = (over: Record<string, unknown>) =>
+    ({
+      listManaged: async () => [],
+      stopAndRemove: async () => {},
+      diskUsageMb: async () => 0,
+      containerState: async () => null,
+      pruneImages: async () => {},
+      pruneVolumes: async () => {},
+      ...over,
+    }) as unknown as ConstructorParameters<typeof Gc>[0]['driver'];
+
+  test('a hung listManaged fails the pass in time; the next pass runs', async () => {
+    let hang = true;
+    const gc = new Gc({
+      db: fakeDb(),
+      driver: driverWith({ listManaged: () => (hang ? never() : Promise.resolve([])) }),
+      lifecycle,
+      callTimeoutMs: 50,
+    });
+    const t0 = Date.now();
+    await expect(gc.gcTick(NOW)).rejects.toThrow(/listManaged did not finish in 50 ms/);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    hang = false;
+    await expect(gc.gcTick(NOW)).resolves.toMatchObject({ orphans: [] });
+  });
+
+  test('a hung stopAndRemove / diskUsageMb is logged, the pass still completes', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const gc = new Gc({
+      db: fakeDb([{ ...ready(1), state: 'ready' }]),
+      driver: driverWith({
+        listManaged: async () => [
+          running(1),
+          { containerId: 'orphan', sandboxId: 'x', running: true },
+        ],
+        stopAndRemove: never,
+        diskUsageMb: never,
+      }),
+      lifecycle,
+      log,
+      callTimeoutMs: 50,
+    });
+    const p = await gc.gcTick(NOW);
+    expect(p.orphans).toEqual(['orphan']);
+    expect(log.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.objectContaining({ message: expect.stringMatching(/stopAndRemove/) }),
+      }),
+      'gc action failed',
+    );
+  });
+
+  test('start(): a hung pass does not keep the timer from running later passes', async () => {
+    let calls = 0;
+    const gc = new Gc({
+      db: fakeDb(),
+      driver: driverWith({
+        listManaged: () => (++calls === 1 ? never() : Promise.resolve([])),
+      }),
+      lifecycle,
+      callTimeoutMs: 30,
+      tickMs: 20,
+    });
+    gc.start();
+    await waitFor('later passes', async () => calls >= 3, 2000);
+    await gc.close();
   });
 });
 
@@ -242,6 +344,14 @@ describe('docker events', () => {
     expect(parseDockerEvent({ ...die, Action: 'start' })).toBeNull();
     expect(parseDockerEvent({ ...die, Actor: { ID: 'abc', Attributes: {} } })).toBeNull();
     expect(parseDockerEvent({ ...die, Type: 'network' })).toBeNull();
+    // With an instance: only events of containers labelled with that instance.
+    expect(parseDockerEvent(die, 'a')).toBeNull();
+    const own = {
+      ...die,
+      Actor: { ID: 'abc', Attributes: { ...die.Actor.Attributes, 'rootcamp.instance': 'a' } },
+    };
+    expect(parseDockerEvent(own, 'a')).toMatchObject({ containerId: 'abc' });
+    expect(parseDockerEvent(own, 'b')).toBeNull();
   });
 
   function fakeWatch() {
@@ -321,7 +431,6 @@ describe.runIf(dockerAvailable)('GC and docker events (runc-dev, real Postgres)'
   let lifecycle: Lifecycle;
   let gc: Gc;
   let events: ReturnType<typeof watchEvents>;
-  let conns = 0;
   const closed: [string, WsCloseReason][] = [];
 
   const row = async (sid: string) =>
@@ -336,7 +445,7 @@ describe.runIf(dockerAvailable)('GC and docker events (runc-dev, real Postgres)'
   beforeAll(async () => {
     pg = await startPg();
     h = pg.h;
-    driver = new ScopedDriver(h.db);
+    driver = new ScopedDriver();
     await driver.ensureNetwork();
     lifecycle = new Lifecycle({
       db: h.db,
@@ -348,7 +457,7 @@ describe.runIf(dockerAvailable)('GC and docker events (runc-dev, real Postgres)'
     });
     lifecycle.onSandboxClosed((sid, reason) => closed.push([sid, reason]));
     lifecycle.start();
-    gc = new Gc({ db: h.db, driver, lifecycle, connectionCount: () => conns });
+    gc = new Gc({ db: h.db, driver, lifecycle });
     events = watchEvents({ driver, lifecycle });
     await events.ready;
   }, 180_000);
@@ -378,18 +487,26 @@ describe.runIf(dockerAvailable)('GC and docker events (runc-dev, real Postgres)'
     expect(closed).toContainEqual([sid, 'expired']);
   });
 
-  test('idle: kept while a terminal is connected, stopped/idle once none is', async () => {
+  test('idle: restart grace, kept while connected, stopped 10 min after the last connection', async () => {
     const sid = await readySandbox();
-    await h.db
-      .update(sandboxes)
-      .set({ lastActivityAt: new Date(Date.now() - 11 * MIN) })
-      .where(eq(sandboxes.id, sid));
-    conns = 1;
-    await gc.gcTick(Date.now());
-    expect((await row(sid)).state).toBe('ready');
-    conns = 0;
-    await gc.gcTick(Date.now());
-    expect(await row(sid)).toMatchObject({ state: 'stopped', stopReason: 'idle' });
+    let n = 0;
+    // A fresh GC, as after a sandboxd restart: its idle clock starts at its first pass.
+    const g = new Gc({ db: h.db, driver, lifecycle, connectionCount: () => n });
+    const t = Date.now();
+    try {
+      await g.gcTick(t + 11 * MIN); // last activity 11 min old, terminals not back yet
+      expect((await row(sid)).state).toBe('ready');
+      n = 1;
+      await g.gcTick(t + 15 * MIN);
+      expect((await row(sid)).state).toBe('ready');
+      n = 0; // tab closed
+      await g.gcTick(t + 24 * MIN);
+      expect((await row(sid)).state).toBe('ready');
+      await g.gcTick(t + 26 * MIN);
+      expect(await row(sid)).toMatchObject({ state: 'stopped', stopReason: 'idle' });
+    } finally {
+      await g.close();
+    }
   });
 
   test('disk over the quota → stopped/disk_quota (measured at most once a minute)', async () => {
@@ -419,6 +536,25 @@ describe.runIf(dockerAvailable)('GC and docker events (runc-dev, real Postgres)'
     await gc.gcTick(Date.now());
     expect(await containersOf(orphanId)).toEqual([]);
     expect(await containersOf(sid)).toEqual([]);
+  });
+
+  test('a container of another sandboxd instance is never listed or swept', async () => {
+    const foreign = new ScopedDriver(); // another SANDBOXD_INSTANCE on the same daemon
+    const foreignId = randomUUID();
+    driver.extra.add(foreignId);
+    const cid = await foreign.createContainer({
+      sandboxId: foreignId,
+      userId: null,
+      image: 'rc/linux-base:24.04',
+      class: 'light',
+      hostname: 'foreign',
+      limits: CLASS_LIMITS.light,
+    });
+    expect((await driver.listManaged()).map((c) => c.containerId)).not.toContain(cid);
+    const p = await gc.gcTick(Date.now());
+    expect(p.orphans).not.toContain(cid);
+    expect(await containersOf(foreignId)).toHaveLength(1);
+    await foreign.stopAndRemove(cid);
   });
 
   test('docker kill → failed/crashed within 5 s, usage booked, closed: sandbox_failed', async () => {
