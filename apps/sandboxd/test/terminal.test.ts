@@ -607,16 +607,24 @@ describe.runIf(dockerAvailable)('terminal websocket (runc-dev, real Postgres)', 
     open.push(c);
     return c;
   };
+  /** Runs `cmd` in the sandbox (as the terminal's own checks do). */
+  async function tmux(cmd: string) {
+    return (await driver.exec(containerId, cmd, { timeoutSec: 10 })).output;
+  }
   async function closeAll() {
     for (const c of open.splice(0)) {
       c.ws.close();
       await c.closed;
     }
     await waitFor('no connections', async () => app.terminals.count(ids.sandboxId) === 0);
-  }
-  /** Number of tmux clients attached in the sandbox. */
-  async function tmux(cmd: string) {
-    return (await driver.exec(containerId, cmd, { timeoutSec: 10 })).output;
+    // A closed socket detaches its tmux client in the background; every test starts with none
+    // (and a client that is never detached fails the test that left it).
+    if ((await lifecycle.get(ids.sandboxId))?.state === 'ready') {
+      await waitFor(
+        'no tmux clients',
+        async () => (await tmux('tmux list-clients | wc -l')).trim() === '0',
+      );
+    }
   }
 
   beforeAll(async () => {

@@ -31,6 +31,8 @@ export const EXEC_PATH = 'PATH=/usr/sbin:/usr/bin:/sbin:/bin';
 const KILL_AFTER_SEC = 2;
 /** Beyond timeout + kill-after, sandboxd stops waiting for the exec stream itself. */
 const STREAM_GRACE_MS = 3000;
+/** `execTty` gives up when tmux has not attached (drawn anything) by then. */
+const TTY_ATTACH_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_SEC = 10;
 const MIB = 1024 * 1024;
 
@@ -283,6 +285,14 @@ export class DockerDriver implements SandboxDriver {
     return null;
   }
 
+  /**
+   * Resolves once our tmux client is attached. `exec.start()` returns as soon as dockerd has
+   * upgraded the connection, before tmux even runs (~50 ms on an idle host, seconds on a busy
+   * one). A handle returned that early can be closed before its client is attached: close()
+   * then misses it and the client stays attached for good, or the client attaches after a
+   * newer connection's and, with `window-size latest`, takes over the window size. tmux draws
+   * as it attaches, so the first output marks the moment.
+   */
   async execTty(id: string): Promise<TtyHandle> {
     const container = this.docker.getContainer(id);
     // Marks this tmux client so close() can detach exactly it (other connections stay).
@@ -310,18 +320,57 @@ export class DockerDriver implements SandboxDriver {
     stream.once('close', onEnd);
     stream.on('error', onEnd);
 
-    // Dropping the connection alone leaves the tmux client running in the container,
-    // so close() terminates our client (tmux detaches it; the session lives on).
-    const detach = `for p in $(tmux list-clients -F '#{client_pid}' 2>/dev/null); do
-  tr '\\0' '\\n' < /proc/$p/environ 2>/dev/null | grep -qx ${shq(`RC_TTY_CLIENT=${clientId}`)} && kill $p
-done; exit 0`;
+    // Output that comes before the first onData() (the attach redraw) is held, with the
+    // stream paused, and replayed to it.
+    const sinks: ((b: Buffer) => void)[] = [];
+    const held: Buffer[] = [];
+    let drew!: () => void;
+    const firstOutput = new Promise<void>((resolve) => {
+      drew = resolve;
+    });
+    stream.on('data', (b: Buffer) => {
+      drew();
+      if (sinks.length > 0) {
+        for (const cb of sinks) cb(b);
+        return;
+      }
+      held.push(b);
+      stream.pause();
+    });
 
-    return {
+    // Docker does not end an exec when its connection closes, so the tmux client would stay
+    // attached: close() terminates exactly ours (tmux drops it, the session lives on). It
+    // waits up to 2 s for the client to show up (not attached yet: only after the attach
+    // timeout below), then up to 2 s for it to be gone.
+    const detach = `mine() {
+  for p in $(tmux list-clients -F '#{client_pid}' 2>/dev/null); do
+    tr '\\0' '\\n' < /proc/$p/environ 2>/dev/null | grep -qx ${shq(`RC_TTY_CLIENT=${clientId}`)} && echo $p
+  done
+}
+n=0
+until p=$(mine); [ -n "$p" ]; do
+  n=$((n + 1)); [ $n -gt 20 ] && exit 0
+  sleep 0.1
+done
+kill $p
+n=0
+while kill -0 $p 2>/dev/null; do
+  n=$((n + 1)); [ $n -gt 20 ] && { kill -9 $p; exit 0; }
+  sleep 0.1
+done
+exit 0`;
+
+    const handle: TtyHandle = {
       write: (b) => {
         if (!exited) stream.write(b);
       },
       onData: (cb) => {
-        stream.on('data', cb);
+        sinks.push(cb);
+        if (held.length === 0) return;
+        // Resume first: new output is emitted on a later tick, after the replay, and a
+        // pause() from `cb` during the replay still holds.
+        stream.resume();
+        for (const b of held.splice(0)) cb(b);
       },
       resize: async (cols, rows) => {
         await exec.resize({ w: cols, h: rows });
@@ -329,7 +378,7 @@ done; exit 0`;
       close: () => {
         if (exited) return;
         const fallback = setTimeout(() => stream.destroy(), STREAM_GRACE_MS);
-        this.exec(id, detach, { timeoutSec: 5 })
+        this.exec(id, detach, { timeoutSec: 8 })
           .catch(() => {})
           .finally(() => {
             clearTimeout(fallback);
@@ -347,6 +396,22 @@ done; exit 0`;
         stream.resume();
       },
     };
+
+    // Attached (first output), or tmux ended first (the handle reports the exit).
+    let timer: NodeJS.Timeout | undefined;
+    const ready = await Promise.race([
+      firstOutput.then(() => true),
+      new Promise<boolean>((resolve) => handle.onExit(() => resolve(true))),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), TTY_ATTACH_TIMEOUT_MS);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!ready) {
+      handle.close();
+      throw new Error(`tmux did not attach within ${TTY_ATTACH_TIMEOUT_MS} ms`);
+    }
+    return handle;
   }
 
   async stopAndRemove(id: string): Promise<void> {

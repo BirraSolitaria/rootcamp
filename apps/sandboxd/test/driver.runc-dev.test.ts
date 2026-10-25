@@ -139,6 +139,29 @@ describe.runIf(dockerAvailable)('runc-dev driver (real dockerd)', () => {
     expect(s.output).toBe('alive\n0\n');
   });
 
+  test('execTty resolves only once its tmux client is attached; close() right away detaches it', async () => {
+    const clients = async () =>
+      (await driver.exec(containerId, 'tmux list-clients | wc -l', { timeoutSec: 5 })).output;
+    // tmux starting slowly, as on a busy host: the TTY exec finds this wrapper first in PATH;
+    // driver.exec (fixed PATH) does not.
+    const wrapper = '/usr/local/bin/tmux';
+    await driver.exec(
+      containerId,
+      `printf '#!/bin/sh\\nsleep 1\\nexec /usr/bin/tmux "$@"\\n' > ${wrapper} && chmod +x ${wrapper}`,
+      { timeoutSec: 5 },
+    );
+    try {
+      const tty = await driver.execTty(containerId);
+      expect(await clients()).toBe('1\n');
+      const exited = new Promise<void>((resolve) => tty.onExit(() => resolve()));
+      tty.close();
+      await exited;
+      expect(await clients()).toBe('0\n');
+    } finally {
+      await driver.exec(containerId, `rm -f ${wrapper}`, { timeoutSec: 5 });
+    }
+  });
+
   test('listManaged and diskUsageMb see the container', async () => {
     const managed = await driver.listManaged();
     expect(managed).toContainEqual({ containerId, sandboxId, running: true });

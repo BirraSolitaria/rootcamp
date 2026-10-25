@@ -54,10 +54,11 @@ export interface ExecResult {
 /** An interactive `docker exec` with a TTY (the terminal WebSocket, Task 6). */
 export interface TtyHandle {
   write(b: Buffer): void;
+  /** Output so far (the attach redraw) is replayed to the first callback. */
   onData(cb: (b: Buffer) => void): void;
   /** Resizes the exec's pseudo-terminal. */
   resize(cols: number, rows: number): Promise<void>;
-  /** Detaches: ends the exec stream (the tmux session keeps running). */
+  /** Detaches: terminates our tmux client, then ends the exec stream (the session keeps running). */
   close(): void;
   /** Called once when the exec stream ends, whoever ended it. */
   onExit(cb: () => void): void;
@@ -86,7 +87,7 @@ export interface SandboxDriver {
   waitBoot(id: string, timeoutMs: number): Promise<void>;
   /** Runs `script` via stdin in `bash -s` as root under `timeout`. */
   exec(id: string, script: string, o: ExecOptions): Promise<ExecResult>;
-  /** Attaches to (or creates) tmux session `main`. */
+  /** Attaches to (or creates) tmux session `main`; resolves once our tmux client is attached. */
   execTty(id: string): Promise<TtyHandle>;
   /** `stop -t 10`, then `rm -v`; a missing container is not an error. */
   stopAndRemove(id: string): Promise<void>;
