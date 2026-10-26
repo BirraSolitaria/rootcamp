@@ -1,0 +1,20 @@
+# rootcamp: firewall of the sandbox network rc-sbx (spec §6.3). Installed by
+# infra/scripts/bootstrap-vps.sh into /etc/systemd/system, rules into /opt/rootcamp.
+# Re-applied whenever Docker (re)starts, at boot included: WantedBy pulls it in with
+# docker.service, PartOf restarts it together with Docker. Re-applying is idempotent:
+# the restores flush and refill only the RC-SBX-* chains, rc-sbx-jumps.sh adds a jump
+# only when `iptables -C` does not find it. Stopping the unit leaves the rules in place.
+[Unit]
+Description=rootcamp sandbox firewall (network rc-sbx)
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/iptables-restore --noflush /opt/rootcamp/rc-sbx.rules
+ExecStart=/usr/sbin/ip6tables-restore --noflush /opt/rootcamp/rc-sbx6.rules
+ExecStartPost=/opt/rootcamp/rc-sbx-jumps.sh
+
+[Install]
+WantedBy=docker.service

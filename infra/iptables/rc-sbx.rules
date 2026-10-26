@@ -1,0 +1,35 @@
+# rootcamp: IPv4 firewall of the sandbox network rc-sbx (spec §6.3).
+# Applied by rc-sbx-firewall.service: iptables-restore --noflush /opt/rootcamp/rc-sbx.rules
+#
+# Only the two own chains are declared here. With --noflush, iptables-restore leaves Docker's
+# and ufw's rules alone and flushes + refills exactly these chains, so re-applying (every
+# Docker restart) never duplicates a rule. The jumps into them are inserted once, at the top,
+# by rc-sbx-jumps.sh (iptables -C before -I):
+#   INPUT       -i rc-sbx0              -> RC-SBX-INPUT
+#   DOCKER-USER -i rc-sbx0 / -o rc-sbx0 -> RC-SBX-FORWARD
+#   DOCKER-USER -s 172.30.0.0/24        -> RC-SBX-FORWARD
+# rc-sbx0 is the bridge of the Docker network rc-sbx (bootstrap-vps.sh creates it with
+# com.docker.network.bridge.name=rc-sbx0); matching the interface, not only the source address,
+# also catches packets with a forged source.
+#
+# Allowed from the sandboxes: only 172.30.0.1 tcp 3142 (apt-cacher-ng), tcp 5000 (registry),
+# udp/tcp 53 (dnsmasq); everything else is dropped. A mirror listening on the host itself hits
+# RC-SBX-INPUT. A port that Docker publishes on 172.30.0.1 is DNAT-ed to the mirror container
+# before filtering, so it is forwarded instead: RC-SBX-FORWARD lets it through by the original
+# destination that conntrack remembers (--ctorigdst/--ctorigdstport), and lets the replies back.
+*filter
+:RC-SBX-INPUT - [0:0]
+:RC-SBX-FORWARD - [0:0]
+-A RC-SBX-INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A RC-SBX-INPUT -s 172.30.0.0/24 -d 172.30.0.1/32 -p tcp -m tcp --dport 3142 -j ACCEPT
+-A RC-SBX-INPUT -s 172.30.0.0/24 -d 172.30.0.1/32 -p tcp -m tcp --dport 5000 -j ACCEPT
+-A RC-SBX-INPUT -s 172.30.0.0/24 -d 172.30.0.1/32 -p udp -m udp --dport 53 -j ACCEPT
+-A RC-SBX-INPUT -s 172.30.0.0/24 -d 172.30.0.1/32 -p tcp -m tcp --dport 53 -j ACCEPT
+-A RC-SBX-INPUT -j DROP
+-A RC-SBX-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A RC-SBX-FORWARD -i rc-sbx0 -s 172.30.0.0/24 -p tcp -m conntrack --ctorigdst 172.30.0.1/32 --ctorigdstport 3142 -j ACCEPT
+-A RC-SBX-FORWARD -i rc-sbx0 -s 172.30.0.0/24 -p tcp -m conntrack --ctorigdst 172.30.0.1/32 --ctorigdstport 5000 -j ACCEPT
+-A RC-SBX-FORWARD -i rc-sbx0 -s 172.30.0.0/24 -p udp -m conntrack --ctorigdst 172.30.0.1/32 --ctorigdstport 53 -j ACCEPT
+-A RC-SBX-FORWARD -i rc-sbx0 -s 172.30.0.0/24 -p tcp -m conntrack --ctorigdst 172.30.0.1/32 --ctorigdstport 53 -j ACCEPT
+-A RC-SBX-FORWARD -j DROP
+COMMIT

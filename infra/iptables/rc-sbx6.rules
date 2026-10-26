@@ -1,0 +1,13 @@
+# rootcamp: IPv6 firewall of the sandbox network rc-sbx (spec §6.3).
+# Applied by rc-sbx-firewall.service: ip6tables-restore --noflush /opt/rootcamp/rc-sbx6.rules
+#
+# rc-sbx is IPv4-only, but the bridge rc-sbx0 still gets an IPv6 link-local address, and root
+# inside a Sysbox sandbox owns its network namespace, so it can turn IPv6 back on for eth0 and
+# reach the host over fe80::/10, where ufw allows ssh to anyone. Nothing over IPv6 is allowed
+# from or to the sandboxes. Same layout as rc-sbx.rules: own chains here, jumps by rc-sbx-jumps.sh.
+*filter
+:RC-SBX-INPUT - [0:0]
+:RC-SBX-FORWARD - [0:0]
+-A RC-SBX-INPUT -j DROP
+-A RC-SBX-FORWARD -j DROP
+COMMIT
