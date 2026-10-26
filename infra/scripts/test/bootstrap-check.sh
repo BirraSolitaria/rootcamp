@@ -45,11 +45,11 @@ expect_eq() {
 version_of() { sed -n "s/^$1=//p" "$versions_file" | tail -n 1; }
 # ufw_allows <варианты To через |>: в `ufw status` есть IPv4-строка «… ALLOW Anywhere».
 # shellcheck disable=SC2329 # вызывается через check "…" ufw_allows
-ufw_allows() { ufw status | grep -qE "^($1)[[:space:]]+ALLOW[[:space:]]+Anywhere[[:space:]]*\$"; }
+# (вывод — через here-string, не `cmd | grep -q`: при pipefail ранний выход grep -q даёт SIGPIPE)
+ufw_allows() { grep -qE "^($1)[[:space:]]+ALLOW[[:space:]]+Anywhere[[:space:]]*\$" <<<"$(ufw status)"; }
 # shellcheck disable=SC2329 # вызывается через check "…" unit_bound_to_docker
 unit_bound_to_docker() {
-  systemctl show -p After "$UNIT" | grep -q 'docker\.service' &&
-    systemctl show -p PartOf "$UNIT" | grep -q 'docker\.service'
+  [[ $(systemctl show -p After "$UNIT") == *docker.service* && $(systemctl show -p PartOf "$UNIT") == *docker.service* ]]
 }
 
 if [[ $EUID -ne 0 ]]; then

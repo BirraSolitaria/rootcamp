@@ -204,7 +204,7 @@ for rule in OpenSSH 80/tcp 443/tcp; do
   if grep -qv '^Skipping adding existing rule' <<<"$out"; then ufw_added+=("$rule"); fi
 done
 if ((${#ufw_added[@]})); then changed "ufw: разрешены ${ufw_added[*]}"; else ok "ufw: 22 (OpenSSH), 80/tcp, 443/tcp уже разрешены"; fi
-if ufw status | grep -q '^Status: active'; then
+if grep -q '^Status: active' <<<"$(ufw status)"; then
   ok "ufw включён"
 else
   ufw --force enable >/dev/null
@@ -212,8 +212,11 @@ else
 fi
 
 # ---------------------------------------------------------------- unattended-upgrades (без автоперезагрузки)
-if apt-config dump | grep -qx 'APT::Periodic::Update-Package-Lists "1";' &&
-  apt-config dump | grep -qx 'APT::Periodic::Unattended-Upgrade "1";'; then
+# Big outputs go through a variable, not `cmd | grep -q`: grep -q exits on the first match,
+# cmd then dies of SIGPIPE, and pipefail turns the match into a failure.
+apt_cfg=$(apt-config dump)
+if grep -qx 'APT::Periodic::Update-Package-Lists "1";' <<<"$apt_cfg" &&
+  grep -qx 'APT::Periodic::Unattended-Upgrade "1";' <<<"$apt_cfg"; then
   ok "unattended-upgrades настроен (20auto-upgrades)"
 else
   printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' >/etc/apt/apt.conf.d/20auto-upgrades
@@ -225,13 +228,13 @@ else
   systemctl enable --now unattended-upgrades
   changed "служба unattended-upgrades включена"
 fi
-if apt-config dump | grep -qiE '^Unattended-Upgrade::Automatic-Reboot "(1|true|yes)";'; then
+if grep -qiE '^Unattended-Upgrade::Automatic-Reboot "(1|true|yes)";' <<<"$apt_cfg"; then
   warn "включена автоперезагрузка unattended-upgrades, а решение R-M4b-2 — без неё; скрипт её не трогает"
 fi
 
 # ---------------------------------------------------------------- пользователь deploy
 if id deploy >/dev/null 2>&1; then
-  if id -nG deploy | tr ' ' '\n' | grep -qx docker; then
+  if [[ " $(id -nG deploy) " == *" docker "* ]]; then
     ok "deploy в группе docker"
   else
     usermod -aG docker deploy
